@@ -1355,6 +1355,40 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
     # ── publish ─────────────────────────────────────────────────────────
     elif args.command == "publish":
+        # Local, in-process publish (free edition, no server): scan → masked
+        # git mirror the AI can read.
+        if not _is_connected():
+            eng = _local_engine()
+            print(f"\n  {CYAN}[LOCAL]{RESET} Publishing masked copy to "
+                  f"{args.target_url}...", flush=True)
+            # The CLI runs per-process, so the in-memory session (masked file
+            # contents) from an earlier `scan` is gone. Rebuild it from the
+            # source repo, preserving token mappings, before pushing.
+            from server_core import SESSIONS, _get_or_load_scan
+            _sc = _get_or_load_scan(args.scan_id)
+            if _sc and _sc.get("session_key") not in SESSIONS:
+                eng.sync_repo(args.scan_id)
+                _sc = _get_or_load_scan(args.scan_id)
+            # Remember the target so `sync` re-publishes on future changes.
+            # Persist it — the CLI is per-process, so this must survive to disk.
+            if _sc is not None:
+                from server_core import _persist_scan
+                _sc["publish_target"] = args.target_url
+                if args.credential_id:
+                    _sc["credential_id"] = args.credential_id
+                _persist_scan(args.scan_id)
+            result = eng.publish_scan(
+                args.scan_id, args.target_url,
+                token=args.token, credential_id=args.credential_id,
+                username=args.username)
+            print(f"  {GREEN}✓ Published masked repo{RESET}")
+            print(f"  {DIM}Pushed to:{RESET}  {result.get('pushed_to', args.target_url)}")
+            print(f"  {DIM}Files:{RESET}      {result.get('files', '?')}")
+            print(f"\n  {DIM}Point your AI tool at this masked repo — it never "
+                  f"sees the real secrets.{RESET}")
+            print(f"  {DIM}Keep it current:{RESET} localmask sync {args.scan_id}\n")
+            return
+
         client = _get_client()
 
         # Resolve credential_id from saved config if not provided
@@ -1391,15 +1425,32 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
     # ── sync ────────────────────────────────────────────────────────────
     elif args.command == "sync":
-        client = _get_client()
         scan_id = args.scan_id
         print(f"\n  {MAGENTA}[SYNC]{RESET} Re-scanning {scan_id}...", flush=True)
         print(f"  {DIM}Pulling latest code, preserving token mappings...{RESET}")
 
-        # Call sync endpoint
-        cred_id = args.credential_id or _load_config().get("credential_id", "")
-        body = {"credential_id": cred_id} if cred_id else {}
-        result = client._req("POST", f"/api/repos/{scan_id}/sync", body)
+        if not _is_connected():
+            eng = _local_engine()
+            result = eng.sync_repo(
+                scan_id, credential_id=args.credential_id or "")
+            # Re-push the masked mirror if this scan has a publish target.
+            # (sync_repo's built-in auto-republish only fires for 'approved'
+            # scans; standalone free scans stay 'draft', so push explicitly.)
+            from server_core import _get_or_load_scan
+            _sc = _get_or_load_scan(scan_id)
+            _target = _sc.get("publish_target", "") if _sc else ""
+            if _target and not result.get("re_published"):
+                try:
+                    result["re_published"] = eng.publish_scan(
+                        scan_id, _target,
+                        credential_id=_sc.get("credential_id", ""))
+                except Exception as e:
+                    result["re_published"] = {"error": str(e)[:120]}
+        else:
+            client = _get_client()
+            cred_id = args.credential_id or _load_config().get("credential_id", "")
+            body = {"credential_id": cred_id} if cred_id else {}
+            result = client._req("POST", f"/api/repos/{scan_id}/sync", body)
 
         if result.get("error"):
             print(f"  {RED}✗ {result['error']}{RESET}\n")
