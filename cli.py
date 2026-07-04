@@ -171,6 +171,17 @@ def _get_client() -> ServiceClient:
     return ServiceClient(url)
 
 
+def _is_connected() -> bool:
+    return bool(_load_config().get("service_url"))
+
+
+def _local_engine():
+    """In-process engine — lets scan/status/publish/sync/teach work with no
+    server (the free edition ships no web server). Returns a LocalMaskEngine."""
+    from server_core import LocalMaskEngine
+    return LocalMaskEngine()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # DETECTION MODEL (remote only — values never leave server)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1119,6 +1130,31 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
     # ── scan ────────────────────────────────────────────────────────────────
     elif args.command == "scan":
+        # Local, in-process scan (no server needed) — the default for the free
+        # edition. Used whenever not connected to a service, or the target is a
+        # local directory.
+        if not _is_connected() or os.path.isdir(os.path.expanduser(args.repo_url)):
+            print(f"\n  {CYAN}[LOCAL]{RESET} Scanning on this machine "
+                  f"(nothing leaves your computer)...", flush=True)
+            eng = _local_engine()
+            result = eng.scan_repo(
+                source=os.path.expanduser(args.repo_url),
+                sensitivity=args.sensitivity, org=args.org)
+            scan_id = result["scan_id"]
+            stats = result.get("summary_stats", {})
+            print(f"  {GREEN}✓ Scan complete{RESET}\n")
+            print(f"  {BOLD}Scan ID:{RESET}     {CYAN}{scan_id}{RESET}")
+            print(f"  {DIM}Files:{RESET}       {stats.get('total_files', 0)}")
+            print(f"  {DIM}Detections:{RESET}  {RED}{stats.get('total_detections', 0)}{RESET}")
+            by_type = stats.get("by_type", {})
+            if by_type:
+                print(f"\n  {BOLD}By type:{RESET}")
+                for t, count in sorted(by_type.items(), key=lambda x: -x[1]):
+                    print(f"    {t:28s} {RED}{count}{RESET}")
+            print(f"\n  {DIM}Next:{RESET} localmask status  ·  "
+                  f"localmask publish {scan_id} --target <git-url>")
+            return
+
         client = _get_client()
 
         # Resolve credential_id: explicit flag > saved config
@@ -1157,6 +1193,18 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
     # ── status ──────────────────────────────────────────────────────────────
     elif args.command == "status":
+        if not _is_connected():
+            eng = _local_engine()
+            if args.scan_id:
+                print_scan_detail(eng.get_scan(args.scan_id))
+            else:
+                scans = eng.list_scans(args.org)
+                if not scans:
+                    print(f"  {DIM}No local scans yet. Run: localmask scan <path>{RESET}")
+                for s in scans:
+                    print(f"  {CYAN}{s['scan_id']}{RESET}  {s.get('repo_url','')}  "
+                          f"{RED}{s.get('detection_count', 0)}{RESET} detections")
+            return
         client = _get_client()
         if args.scan_id:
             scan = client.get_scan(args.scan_id)
