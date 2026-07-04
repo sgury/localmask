@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localmask"
+version = "0.9.0"
+description = "LocalMask Free — privacy-first secret masking, 100% local, regex engine."
+requires-python = ">=3.10"
+dependencies = ["pyyaml>=6.0.1", "gitpython>=3.1.40", "mcp>=1.28.0"]
+
+[project.scripts]
+localmask = "cli:main"
+
+[tool.setuptools]
+packages = ["localmask"]
+py-modules = ["cli", "mcp_server", "server_core", "regex_rules_safe", "ner_scanner", "licensing"]

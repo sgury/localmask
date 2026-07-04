@@ -1,0 +1,4 @@
+# LocalMask Free — 100% local, regex engine. No ML/cloud deps.
+pyyaml>=6.0.1
+gitpython>=3.1.40
+mcp>=1.28.0
