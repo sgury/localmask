@@ -423,6 +423,46 @@ def get_local_credential(cred_id: str):
         return None
 
 
+class _LocalKeyStore(_Crypto):
+    """Local, encrypted AI-provider API-key store for the free/offline CLI, so
+    `ask` can reuse a saved key instead of taking it on the command line."""
+
+    def __init__(self, db_path: str = _DB):
+        self._init_crypto(_local_key())
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
+        self.db.execute("""CREATE TABLE IF NOT EXISTS ai_keys (
+            provider TEXT PRIMARY KEY, enc BLOB, scheme TEXT, ts REAL)""")
+        self.db.commit()
+        try:
+            os.chmod(db_path, 0o600)
+        except OSError:
+            pass
+
+    def set(self, provider: str, key: str):
+        self.db.execute("INSERT OR REPLACE INTO ai_keys VALUES (?,?,?,?)",
+                        (provider.lower(), self._encrypt(key), self.scheme,
+                         time.time()))
+        self.db.commit()
+
+    def get(self, provider: str):
+        row = self.db.execute(
+            "SELECT enc, scheme FROM ai_keys WHERE provider=?",
+            (provider.lower(),)).fetchone()
+        return self._decrypt(row[0], row[1]) if row else None
+
+
+def set_local_ai_key(provider: str, key: str):
+    _LocalKeyStore().set(provider, key)
+
+
+def get_local_ai_key(provider: str):
+    try:
+        return _LocalKeyStore().get(provider)
+    except Exception:
+        return None
+
+
 def get_vault_store(repo_id: str):
     """Pick the shared Redis store when configured + allowed, else local SQLite.
     Fails soft to SQLite so scanning never breaks."""

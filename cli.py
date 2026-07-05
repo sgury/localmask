@@ -285,14 +285,19 @@ def _local_ask(args):
         print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
 
     provider = args.provider.lower()
-    # resolve key: --api-key > provider-specific env > generic env
+    # resolve key: --api-key > provider-specific env > generic env > local store
     key = args.api_key
     for env in _ASK_KEY_ENVS.get(provider, []) + ["LOCALMASK_AI_KEY"]:
         if not key:
             key = os.environ.get(env, "")
+    if not key and provider != "dry":
+        from localmask.vault_store import get_local_ai_key
+        key = get_local_ai_key(provider) or ""
     if provider != "dry" and not key:
-        print(f"{RED}No API key for {provider}.{RESET} Pass --api-key or set "
-              f"{' / '.join(_ASK_KEY_ENVS.get(provider, ['LOCALMASK_AI_KEY']))}.")
+        envs = " / ".join(_ASK_KEY_ENVS.get(provider, ["LOCALMASK_AI_KEY"]))
+        print(f"{RED}No API key for {provider}.{RESET} Save one with "
+              f"`localmask set-key {provider}` (stored encrypted, typed hidden), "
+              f"or pass --api-key, or set {envs}.")
         sys.exit(1)
     model = args.model or _ASK_DEFAULT_MODELS.get(provider, "gpt-4o")
     question = args.question or "Review this repository and flag the top security risks."
@@ -1195,10 +1200,15 @@ The AI only sees masked content — real secrets are replaced with tokens.
     approve_p.add_argument("scan_id", help="Scan ID")
 
     # set-key
-    key_p = sub.add_parser("set-key", help="Set AI provider API key")
-    key_p.add_argument("provider", choices=["anthropic", "openai", "gemini"],
+    key_p = sub.add_parser("set-key",
+                           help="Save an AI provider API key (free: encrypted locally; typed hidden)")
+    key_p.add_argument("provider",
+                       choices=["anthropic", "openai", "gemini", "grok", "xai",
+                                "groq", "together", "meta", "openrouter"],
                        help="AI provider name")
-    key_p.add_argument("key", help="API key value")
+    key_p.add_argument("key", nargs="?", default="",
+                       help="API key. Omit to type it hidden (recommended — an "
+                            "argument leaks into shell history).")
 
     # teach — add a secret the scanner missed (or ignore a false positive),
     #         persisted so it applies on every future scan/sync of this repo.
@@ -1387,14 +1397,33 @@ The AI only sees masked content — real secrets are replaced with tokens.
                   f"argument next time so it's typed hidden; and rotate this one.")
         return
 
-    if args.command in ("submit", "approve-all", "set-key") \
-            and not _is_connected():
+    # set-key (free): store the AI provider key encrypted locally so `ask`
+    # reuses it. Typed hidden so it never lands in shell history.
+    if args.command == "set-key" and not _is_connected():
+        import getpass
+        provider = args.provider.lower()
+        key = (args.key or "").strip()
+        passed_as_arg = bool(key)
+        if not key or key == "-":
+            try:
+                key = getpass.getpass(f"  Paste {provider} API key (hidden): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                key = ""
+        if not key:
+            print(f"  {RED}✗ No key provided.{RESET}")
+            return
+        from localmask.vault_store import set_local_ai_key
+        set_local_ai_key(provider, key)
+        print(f"  {GREEN}✓ Saved {provider} key (encrypted, local — 0600 SQLite){RESET}")
+        print(f"  {DIM}Use it:{RESET} localmask ask <scan> \"...\" --provider {provider}")
+        if passed_as_arg:
+            print(f"  {YELLOW}⚠ You passed the key on the command line — it's now "
+                  f"in your shell history.{RESET} Run `set-key {provider}` with no "
+                  f"key next time (typed hidden), and rotate this one.")
+        return
+
+    if args.command in ("submit", "approve-all") and not _is_connected():
         _hint = {
-            "set-key":     "In free, pass your AI key inline: "
-                           "`localmask ask <scan> \"...\" --provider openai "
-                           "--api-key sk-...`, or via env "
-                           "(OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY "
-                           "/ XAI_API_KEY / LOCALMASK_AI_KEY).",
             "submit":      "The submit/approval workflow is a hosted "
                            "(Pro/Team) feature. In free, review decisions "
                            "locally with `localmask review <scan>`.",
