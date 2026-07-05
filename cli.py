@@ -286,14 +286,23 @@ def _print_grant_guide(target_url: str, scan_id: str):
     never hands the AI any credentials."""
     print(f"\n  {BOLD}Two ways to let your AI read the masked code:{RESET}")
     print(f"  {DIM}(It only ever sees ~[TOKEN]~ placeholders — no real secrets.){RESET}\n")
-    print(f"  {BOLD}A) Grant permission to the private masked repo{RESET}")
-    print(f"     Keep {CYAN}{target_url}{RESET} private and give the AI its own read")
-    print(f"     access — read-only collaborator, deploy key, or GitHub/GitLab App.")
-    print(f"     The AI signs in as itself; LocalMask never shares your git token.\n")
-    print(f"  {BOLD}B) Read straight from LocalMask (from memory, nothing published){RESET}")
+    print(f"  {BOLD}A) The AI reads the published masked git mirror{RESET}")
+    print(f"     Give the AI its {BOLD}own{RESET} read access to {CYAN}{target_url}{RESET}")
+    print(f"     (read-only collaborator, deploy key, or GitHub/GitLab App), then it")
+    print(f"     {BOLD}clones/pulls that repo{RESET} — a copy on the AI's side, separate")
+    print(f"     from your real code. LocalMask never shares your git token.")
+    print(f"     {DIM}After you change code:{RESET} {CYAN}localmask sync {scan_id}{RESET} "
+          f"{DIM}re-masks and{RESET}")
+    print(f"     {DIM}re-pushes the mirror (once approved); the AI does{RESET} "
+          f"{CYAN}git pull{RESET} {DIM}to get it.{RESET}\n")
+    print(f"  {BOLD}B) The AI reads live from LocalMask — nothing published{RESET}")
     print(f"     In your AI editor's MCP config, the assistant calls LocalMask's")
-    print(f"     {CYAN}get_file_masked{RESET} / {CYAN}get_detections{RESET} tools — no git repo, no keys.")
-    print(f"\n  {DIM}Keep it current:{RESET} localmask sync {scan_id}\n")
+    print(f"     {CYAN}get_detections{RESET} / {CYAN}get_file_masked{RESET} tools. No git repo, no")
+    print(f"     pull — LocalMask serves the {BOLD}current{RESET} masked content each call")
+    print(f"     (run {CYAN}localmask sync {scan_id}{RESET} {DIM}after code changes so it's fresh).{RESET}")
+    print(f"\n  {DIM}The difference:{RESET} (A) the AI holds its own git copy and "
+          f"{BOLD}pulls{RESET} to update;")
+    print(f"  (B) LocalMask streams the masked files live, always current, no repo.\n")
 
 
 _ASK_DEFAULT_MODELS = {

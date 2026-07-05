@@ -332,7 +332,19 @@ class LocalMaskEngine:
             raise KeyError(f"Scan not found: {scan_id}")
         session = SESSIONS.get(scan.get("session_key", ""))
         if not session:
-            raise RuntimeError("Session expired")
+            # The CLI runs per-process, so the in-memory masked session from an
+            # earlier scan is gone. Rebuild it from source (tokens stay stable)
+            # so the "read from LocalMask" path works without a live server.
+            try:
+                self.sync_repo(scan_id, auto_republish=False)
+                scan = _get_or_load_scan(scan_id)
+                session = SESSIONS.get(scan.get("session_key", ""))
+            except Exception:
+                session = None
+        if not session:
+            raise RuntimeError(
+                "Could not rebuild the masked session (source unavailable). "
+                "Re-scan the repo, or read the published masked mirror instead.")
         fd = session["files"].get(path)
         if not fd:
             raise FileNotFoundError(f"File not found: {path}")

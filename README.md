@@ -113,19 +113,25 @@ The masked copy has only `~[TOKEN]~` placeholders — no real secrets — so the
 can read it safely. **LocalMask never hands the AI any git credentials.** Pick
 whichever fits:
 
-**A) Grant permission to the private masked repo.** Keep the masked repo private
+**A) The AI reads the published masked git mirror.** Keep the masked repo private
 and give the AI *its own* read access — a read-only collaborator, a read-only
-deploy key, or a GitHub/GitLab App. The AI authenticates as itself; you control
-the grant. (Because it's masked, you *could* also just make the mirror public and
-skip auth entirely — no secrets are in it.)
+deploy key, or a GitHub/GitLab App. The AI **clones/pulls that repo** (a copy on
+its side, separate from your real code) and authenticates as itself; LocalMask
+never shares your git token. **To get the updated version after you change code:**
+`localmask sync <scan>` re-masks and re-pushes the mirror (once approved), and the
+AI runs `git pull`. (Because it's masked you *could* also make the mirror public
+and skip auth — no secrets are in it.)
 
-**B) Read straight from LocalMask, from memory — nothing published.** In your AI
-editor's MCP config, the assistant reads the masked files directly from LocalMask
-via the `get_file_masked` and `get_detections` tools. No git repo, no push, no
-keys. (See the MCP setup below.)
+**B) The AI reads live from LocalMask — nothing published.** In your AI editor's
+MCP config, the assistant calls the `get_detections` and `get_file_masked` tools.
+No git repo, no push, no `git pull` — LocalMask serves the **current** masked
+content on each call (run `localmask sync <scan>` after code changes so the next
+read is fresh). Use this when you don't want a mirror at all.
 
-Either way the AI only ever sees tokens, and it gets in with its own identity —
-LocalMask stays out of the AI's authentication.
+**Which to use:** (A) the AI holds its own git copy and *pulls* to update — good
+for agents/CI that clone a repo; (B) LocalMask streams the masked files live,
+always current, no repo. Either way the AI only ever sees `~[TOKEN]~` placeholders
+and signs in with its own identity — LocalMask stays out of its authentication.
 
 ## Keep the masked copy in sync
 

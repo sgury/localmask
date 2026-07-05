@@ -37,6 +37,20 @@ engine = LocalMaskEngine()
 license_mgr = LicenseManager()
 
 
+def _cap_tool(cap: str):
+    """Register an MCP tool only when the current edition has the capability.
+    In the free edition the function stays defined but is NOT advertised to the
+    AI client — so we never expose a tool that can't actually run here."""
+    def deco(fn):
+        try:
+            from localmask._edition import has_capability
+            enabled = has_capability(cap)
+        except Exception:
+            enabled = True
+        return mcp.tool()(fn) if enabled else fn
+    return deco
+
+
 # ── Helper ───────────────────────────────────────────────────────────────────
 
 def _gate(action: str):
@@ -336,7 +350,7 @@ def _import_review_decisions(scan_id: str) -> bool:
     return updated > 0
 
 
-@mcp.tool()
+@_cap_tool("web_ui")
 def open_review_ui(scan_id: str) -> str:
     """Launch the interactive detection reviewer in the terminal.
 
@@ -454,7 +468,7 @@ def get_file_masked(scan_id: str, path: str) -> str:
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
+@_cap_tool("web_ui")
 def submit_for_review(scan_id: str) -> str:
     """Submit a scan for security team approval.
 
@@ -652,14 +666,14 @@ fi
     }, indent=2)
 
 
-@mcp.tool()
+@_cap_tool("learning")
 def get_model_stats() -> str:
     """Get statistics about the detection model — learned rules, accuracy, Ollama status."""
     result = _safe(engine.get_model_stats)
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
+@_cap_tool("learning")
 def retrain_model() -> str:
     """Trigger a retrain cycle on accumulated reviewer feedback.
 
