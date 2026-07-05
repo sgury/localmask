@@ -3,7 +3,8 @@ import re
 
 
 def _make_token(session: dict, value: str, subtype: str) -> str:
-    """Return existing token or mint a new one."""
+    """Return existing token or mint a new one. New mappings are written through
+    to the persistent vault store (if attached) so tokens survive restarts."""
     if value in session["vault"]:
         return session["vault"][value]
     key = subtype.upper().replace(" ", "_").replace("-", "_")
@@ -12,6 +13,10 @@ def _make_token(session: dict, value: str, subtype: str) -> str:
     token = f"~[{key}_{n}]~"
     session["vault"][value] = token
     session["rev_vault"][token] = value
+    store = session.get("_store")
+    if store is not None:
+        store.put(value, token, subtype)
+        store.set_counter(key, n + 1)
     return token
 
 

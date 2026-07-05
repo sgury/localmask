@@ -131,13 +131,29 @@ def _summary(org: str) -> dict:
     }
 
 
-def _new_session(src: str, temp: bool) -> dict:
-    return {
+def _new_session(src: str, temp: bool, persist: bool | None = None) -> dict:
+    """Build a scan session. When persist is on, a local encrypted vault store
+    is attached and hydrated so tokens stay stable across process restarts.
+    persist defaults to env LOCALMASK_PERSIST_VAULT (on unless set to 0); tests
+    call with persist=False for determinism."""
+    if persist is None:
+        persist = os.environ.get("LOCALMASK_PERSIST_VAULT", "1") != "0"
+    session = {
         "src": src, "temp": temp,
         "vault": {}, "rev_vault": {}, "tok_count": {},
         "files": {}, "custom_rules": [], "allowed": set(), "taught": {},
         "published": "",
     }
+    if persist:
+        try:
+            from .vault_store import VaultStore, repo_id_for
+            store = VaultStore(repo_id_for(src))
+            if store.enabled:
+                store.hydrate(session)        # seed stable tokens from disk
+                session["_store"] = store
+        except Exception as e:
+            print(f"[state] vault persistence unavailable: {e}")
+    return session
 
 
 def _notify(scan_id: str, user: str, ntype: str, message: str):
