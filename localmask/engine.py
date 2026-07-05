@@ -700,11 +700,33 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         "stripe_key", "google_api_key", "django_secret_key", "flask_secret_key",
         "boto3_hardcoded_key", "boto3_hardcoded_secret", "oauth2_client_secret",
         "django_db_password", "flask_sqlalchemy_uri", "celery_broker_url",
+        # URL/connection credentials are a specific credential type — prefer
+        # them over generic inferences (email, secret) for the same value.
+        "url_embedded_password", "db_connection_url", "db_connection_string",
+        "mongodb_connection_string", "jdbc_connection_string", "redis_url",
+    }
+    # Inferred infra/PII types (from _infer_secret_type value heuristics) that
+    # are not credentials — gated to 'strict' so standard scans stay low-noise.
+    _STRICT_ONLY_INFERRED = {
+        "internal_url", "server_hostname", "ip_address", "cloud_resource",
+        "file_path",
     }
     seen: dict = {}
     for d in raw_detections:
         v = d["entity"]
         if v in allowed:
+            continue
+        # Unresolved templates are placeholders, not real values — e.g.
+        # postgresql://{{ db_user }}:{{ db_password }}@host or ${DB_PASS}.
+        # Skip any value carrying an interpolation marker.
+        if ("{{" in v and "}}" in v) or "${" in v or "%(" in v \
+                or "<%=" in v or "#{" in v:
+            continue
+        # Broad infra inferences (any http(s) URL → internal_url, generic
+        # hostnames) are PII/infra, not credentials. Per the sensitivity model
+        # they belong at 'strict'; drop them from standard scans to cut noise.
+        if sensitivity != "strict" \
+                and d.get("type", "") in _STRICT_ONLY_INFERRED:
             continue
         reason = d.get("pattern_reason", "")
         if reason == "credit_card" and not _luhn_ok(v):
