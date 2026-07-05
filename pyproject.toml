@@ -15,3 +15,6 @@ localmask = "cli:main"
 [tool.setuptools]
 packages = ["localmask"]
 py-modules = ["cli", "mcp_server", "server_core", "regex_rules_safe", "ner_scanner", "licensing"]
+
+[tool.setuptools.package-data]
+localmask = ["*.json"]
