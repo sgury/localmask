@@ -251,6 +251,11 @@ class LocalMaskEngine:
         scan["updated_at"] = now
         scan["last_synced"] = now
 
+        # Persist the updated detections so a later process (status/review/
+        # export in a fresh CLI invocation) sees the synced result, not the
+        # pre-sync snapshot on disk.
+        _persist_scan(scan_id)
+
         # If scan was published, keep it approved so it can be re-published
         if scan["status"] == "published":
             scan["status"] = "approved"
@@ -534,6 +539,7 @@ class LocalMaskEngine:
         scan["detections"] = _flatten_detections(session)
         scan["summary_stats"] = _scan_stats(scan["detections"], session)
         scan["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _persist_scan(scan_id)
         return {"ok": True, "action": action, "detection_count": len(scan["detections"])}
 
     # ── AI Chat ──────────────────────────────────────────────────────────────

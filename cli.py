@@ -385,7 +385,7 @@ class HierarchicalReviewer:
             f"default SECRET): {RESET}") or "SECRET"
         print(f"\n  {DIM}Teaching + re-scanning…{RESET}")
         try:
-            fresh, hits = self._teach_callback(value, subtype)
+            fresh, hits, added = self._teach_callback(value, subtype)
         except Exception as e:
             print(f"  {RED}✗ Teach failed: {e}{RESET}")
             self._input("  Press Enter to continue...")
@@ -394,10 +394,14 @@ class HierarchicalReviewer:
             self.detections = fresh
             self._regroup()
         tok = subtype.upper().replace(" ", "_")
-        if hits:
-            occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
-            print(f"  {GREEN}✓ Found {occ} — added to this review, "
+        occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
+        if hits and added:
+            print(f"  {GREEN}✓ Found {occ} — {added} added to this review, "
                   f"masked as a {tok} token.{RESET}")
+        elif hits:
+            print(f"  {YELLOW}⚠ Found {occ} in the source, but no new detection "
+                  f"was added{RESET} — it may be inside an already-masked secret "
+                  f"or in a skipped file.")
         else:
             print(f"  {YELLOW}⚠ Not found in the scanned code{RESET} — "
                   f"check the value (whitespace/quotes?). Saved for future scans.")
@@ -1504,8 +1508,8 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
             def teach_local(value, subtype):
                 # Persist to the repo lexicon, then re-scan in place so the
-                # newly-masked value appears. Returns (refreshed_dets, hits)
-                # where hits is how many times the value occurs in the code.
+                # newly-masked value appears. Returns (refreshed_dets, hits,
+                # added) — hits = occurrences in the code, added = new detections.
                 from server_core import _get_or_load_scan
                 from localmask.vault_store import get_vault_store, repo_id_for
                 sc = _get_or_load_scan(scan_id)
@@ -1513,10 +1517,11 @@ The AI only sees masked content — real secrets are replaced with tokens.
                 hits = _count_occurrences(src, value)
                 get_vault_store(repo_id_for(src)).set_lexicon(
                     value, action="mask", subtype=subtype)
+                added = 0
                 if hits:
-                    eng.sync_repo(scan_id)
+                    added = eng.sync_repo(scan_id).get("new_detections", 0)
                 _, fresh = _load_dets()
-                return fresh, hits
+                return fresh, hits, added
 
             HierarchicalReviewer(dets, repo_url, save_callback=save_local,
                                  mode="LOCAL", teach_callback=teach_local).run()
@@ -1755,8 +1760,18 @@ The AI only sees masked content — real secrets are replaced with tokens.
             eng = _local_engine()
             result = eng.sync_repo(scan_id)
             total = result.get("total_detections", 0)
+            added = result.get("new_detections", 0)
             occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
-            print(f"  {GREEN}✓ Found {occ}{RESET} — added to the review "
+            if action == "mask" and added == 0:
+                # Present in the text but the re-scan didn't add a detection.
+                print(f"  {YELLOW}⚠ Found {occ} in the source, but no new "
+                      f"detection was added.{RESET}")
+                print(f"  {DIM}It may sit inside an already-masked secret, or be "
+                      f"in a file LocalMask skips. If you just upgraded, reinstall "
+                      f"to refresh (see below).{RESET}")
+                return
+            print(f"  {GREEN}✓ Found {occ}{RESET} — "
+                  f"{added} added to the review "
                   f"({total} detections now, {CYAN}{scan_id}{RESET})")
             if action == "mask":
                 print(f"  {DIM}The value is now masked as a {args.subtype} "
