@@ -1,18 +1,24 @@
-"""Persistent, encrypted, local mask vault.
+"""Persistent mask vault — local (SQLite) or shared (Redis).
 
 Stores token <-> real-value mappings so tokens stay STABLE across scans, syncs,
-and process restarts — and so rehydration works even in a fresh process. 100%
-local: a SQLite file under ~/.localmask, 0600, gitignored, values encrypted at
-rest. Keyed by repo identity so re-scanning the same repo reuses its tokens.
+and process restarts, and so rehydration works in a fresh process.
 
-Encryption: uses cryptography's Fernet (AES) when installed; otherwise a
-keyed-stream fallback so the free edition still works without the dependency.
-Either way the file is local-only and permission-locked. The value->token index
-is a salted hash, so plaintext secrets never sit in a lookup column.
+Two backends, one interface:
+  * SqliteVaultStore  — 100% local, default. ~/.localmask/vault.sqlite (0600).
+  * RedisVaultStore   — shared across a team so everyone gets consistent tokens
+                        for the same repo (Team/Enterprise). Uses atomic INCR +
+                        HSETNX so concurrent machines never collide.
 
-Disabled cleanly (in-memory only) if the DB can't be opened — scanning never
-breaks because of the store.
+Both encrypt values at rest and index value->token by a salted HMAC, so no
+plaintext secret ever sits in a lookup column. The local backend uses a
+per-machine key; the shared backend uses a team key (LOCALMASK_VAULT_KEY) so
+every member can decrypt.
+
+Selection: RedisVaultStore when LOCALMASK_VAULT_REDIS_URL is set and the edition
+allows it (team+); otherwise SqliteVaultStore. Any failure -> fail soft to the
+local store or disabled; scanning never breaks.
 """
+import base64
 import hashlib
 import hmac
 import os
@@ -25,7 +31,12 @@ _DB = os.path.join(_DIR, "vault.sqlite")
 _KEY_FILE = os.path.join(_DIR, ".vault_key")
 
 
-def _load_key() -> bytes:
+def repo_id_for(src: str) -> str:
+    norm = (src or "").rstrip("/").lower().replace(".git", "")
+    return hashlib.sha256(norm.encode()).hexdigest()[:16]
+
+
+def _local_key() -> bytes:
     os.makedirs(_DIR, exist_ok=True)
     if os.path.exists(_KEY_FILE):
         with open(_KEY_FILE, "rb") as f:
@@ -40,60 +51,37 @@ def _load_key() -> bytes:
     return key
 
 
+def _shared_key() -> bytes:
+    """Team-shared encryption key (all members must share it to decrypt)."""
+    env = os.environ.get("LOCALMASK_VAULT_KEY")
+    if env:
+        return hashlib.sha256(env.encode()).digest()
+    print("[vault_store] WARNING: LOCALMASK_VAULT_KEY not set — the shared vault "
+          "needs one common key across the team for at-rest encryption.")
+    return hashlib.sha256(b"localmask-default-shared-key").digest()
+
+
 def _fernet(key: bytes):
     try:
-        import base64
         from cryptography.fernet import Fernet
         return Fernet(base64.urlsafe_b64encode(key))
     except Exception:
         return None
 
 
-def repo_id_for(src: str) -> str:
-    """Stable id for a repo source (URL or path) — the vault namespace."""
-    norm = (src or "").rstrip("/").lower()
-    norm = norm.replace(".git", "")
-    return hashlib.sha256(norm.encode()).hexdigest()[:16]
+class _Crypto:
+    """Shared encryption + hashing for both backends."""
 
-
-class VaultStore:
-    """Encrypted per-repo token<->value store. Fails soft to disabled."""
-
-    def __init__(self, repo_id: str, db_path: str = _DB):
-        self.repo_id = repo_id
-        self.enabled = True
-        self._key = _load_key()
-        self._fernet = _fernet(self._key)
+    def _init_crypto(self, key: bytes):
+        self._key = key
+        self._fernet = _fernet(key)
         self.scheme = "fernet" if self._fernet else "xor"
-        try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            self.db = sqlite3.connect(db_path, check_same_thread=False)
-            self.db.execute("""CREATE TABLE IF NOT EXISTS vault (
-                repo_id TEXT, vhash TEXT, token TEXT, subtype TEXT,
-                enc BLOB, scheme TEXT, ts REAL,
-                PRIMARY KEY (repo_id, vhash))""")
-            self.db.execute("""CREATE INDEX IF NOT EXISTS idx_vault_token
-                ON vault(repo_id, token)""")
-            self.db.execute("""CREATE TABLE IF NOT EXISTS counters (
-                repo_id TEXT, ckey TEXT, n INTEGER,
-                PRIMARY KEY (repo_id, ckey))""")
-            self.db.commit()
-            try:
-                os.chmod(db_path, 0o600)
-            except OSError:
-                pass
-        except Exception as e:
-            print(f"[vault_store] disabled (cannot open {db_path}): {e}")
-            self.enabled = False
 
-    # ── crypto ──────────────────────────────────────────────────────────
     def _encrypt(self, value: str) -> bytes:
         if self._fernet:
             return self._fernet.encrypt(value.encode())
-        # keyed-stream fallback (obfuscation; file perms are the real guard)
         ks = hashlib.sha256(self._key).digest()
-        pt = value.encode()
-        return bytes(b ^ ks[i % len(ks)] for i, b in enumerate(pt))
+        return bytes(b ^ ks[i % len(ks)] for i, b in enumerate(value.encode()))
 
     def _decrypt(self, blob: bytes, scheme: str) -> str:
         if scheme == "fernet" and self._fernet:
@@ -105,21 +93,81 @@ class VaultStore:
     def _vhash(self, value: str) -> str:
         return hmac.new(self._key, value.encode(), hashlib.sha256).hexdigest()
 
-    # ── mappings ────────────────────────────────────────────────────────
-    def put(self, value: str, token: str, subtype: str = ""):
-        if not self.enabled:
-            return
+
+class SqliteVaultStore(_Crypto):
+    """Local, per-machine encrypted store."""
+
+    def __init__(self, repo_id: str, db_path: str = _DB):
+        self.repo_id = repo_id
+        self.backend = "sqlite"
+        self.enabled = True
+        self._init_crypto(_local_key())
         try:
-            self.db.execute(
-                "INSERT OR REPLACE INTO vault VALUES (?,?,?,?,?,?,?)",
-                (self.repo_id, self._vhash(value), token, subtype,
-                 self._encrypt(value), self.scheme, time.time()))
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            self.db = sqlite3.connect(db_path, check_same_thread=False)
+            self.db.execute("""CREATE TABLE IF NOT EXISTS vault (
+                repo_id TEXT, vhash TEXT, token TEXT, subtype TEXT,
+                enc BLOB, scheme TEXT, ts REAL, PRIMARY KEY (repo_id, vhash))""")
+            self.db.execute("""CREATE INDEX IF NOT EXISTS idx_vault_token
+                ON vault(repo_id, token)""")
+            self.db.execute("""CREATE TABLE IF NOT EXISTS counters (
+                repo_id TEXT, ckey TEXT, n INTEGER, PRIMARY KEY (repo_id, ckey))""")
             self.db.commit()
-        except Exception:
-            pass
+            try:
+                os.chmod(db_path, 0o600)
+            except OSError:
+                pass
+        except Exception as e:
+            print(f"[vault_store] sqlite disabled ({e})")
+            self.enabled = False
+
+    def token_for(self, value: str):
+        if not self.enabled:
+            return None
+        row = self.db.execute(
+            "SELECT token FROM vault WHERE repo_id=? AND vhash=?",
+            (self.repo_id, self._vhash(value))).fetchone()
+        return row[0] if row else None
+
+    def reserve(self, ckey: str) -> int:
+        """Return the next 0-based counter and persist the increment."""
+        if not self.enabled:
+            return 0
+        cur = self.db.execute(
+            "SELECT n FROM counters WHERE repo_id=? AND ckey=?",
+            (self.repo_id, ckey)).fetchone()
+        n = cur[0] if cur else 0
+        self.db.execute("INSERT OR REPLACE INTO counters VALUES (?,?,?)",
+                        (self.repo_id, ckey, n + 1))
+        self.db.commit()
+        return n
+
+    def put_if_absent(self, value: str, token: str, subtype: str = "") -> str:
+        existing = self.token_for(value)
+        if existing:
+            return existing
+        if self.enabled:
+            try:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO vault VALUES (?,?,?,?,?,?,?)",
+                    (self.repo_id, self._vhash(value), token, subtype,
+                     self._encrypt(value), self.scheme, time.time()))
+                self.db.commit()
+            except Exception:
+                pass
+        return self.token_for(value) or token
+
+    # kept for interface parity / write-through
+    def put(self, value: str, token: str, subtype: str = ""):
+        self.put_if_absent(value, token, subtype)
+
+    def set_counter(self, ckey: str, n: int):
+        if self.enabled:
+            self.db.execute("INSERT OR REPLACE INTO counters VALUES (?,?,?)",
+                            (self.repo_id, ckey, n))
+            self.db.commit()
 
     def hydrate(self, session: dict):
-        """Fill session vault/rev_vault/tok_count from the store."""
         if not self.enabled:
             return
         try:
@@ -136,24 +184,114 @@ class VaultStore:
         except Exception as e:
             print(f"[vault_store] hydrate failed: {e}")
 
+    def stats(self) -> dict:
+        n = 0
+        if self.enabled:
+            try:
+                n = self.db.execute("SELECT COUNT(*) FROM vault WHERE repo_id=?",
+                                    (self.repo_id,)).fetchone()[0]
+            except Exception:
+                pass
+        return {"backend": "sqlite", "enabled": self.enabled,
+                "scheme": self.scheme, "mappings": n, "repo_id": self.repo_id}
+
+
+class RedisVaultStore(_Crypto):
+    """Shared, team-wide store. Atomic INCR + HSETNX make concurrent minting
+    across machines collision-free."""
+
+    def __init__(self, repo_id: str, url: str):
+        self.repo_id = repo_id
+        self.backend = "redis"
+        self.enabled = True
+        self._init_crypto(_shared_key())
+        try:
+            import redis
+            self.r = redis.from_url(url)
+            self.r.ping()
+        except Exception as e:
+            print(f"[vault_store] redis unavailable ({e}) — falling back to local")
+            self.enabled = False
+
+    def _k(self, suffix: str) -> str:
+        return f"lm:vault:{self.repo_id}:{suffix}"
+
+    def token_for(self, value: str):
+        if not self.enabled:
+            return None
+        v = self.r.hget(self._k("v2t"), self._vhash(value))
+        return v.decode() if v else None
+
+    def reserve(self, ckey: str) -> int:
+        if not self.enabled:
+            return 0
+        return int(self.r.incr(self._k(f"ctr:{ckey}"))) - 1   # 0-based
+
+    def put_if_absent(self, value: str, token: str, subtype: str = "") -> str:
+        if not self.enabled:
+            return token
+        vh = self._vhash(value)
+        if self.r.hsetnx(self._k("v2t"), vh, token):      # we won the race
+            self.r.hset(self._k("enc"), token, self._encrypt(value))
+            if subtype:
+                self.r.hset(self._k("sub"), token, subtype)
+            return token
+        won = self.r.hget(self._k("v2t"), vh)             # someone beat us
+        return won.decode() if won else token
+
+    def put(self, value: str, token: str, subtype: str = ""):
+        self.put_if_absent(value, token, subtype)
+
     def set_counter(self, ckey: str, n: int):
+        # counters advance via reserve()/INCR; only bump forward, never back
+        if self.enabled:
+            cur = self.r.get(self._k(f"ctr:{ckey}"))
+            if cur is None or int(cur) < n:
+                self.r.set(self._k(f"ctr:{ckey}"), n)
+
+    def hydrate(self, session: dict):
         if not self.enabled:
             return
         try:
-            self.db.execute("INSERT OR REPLACE INTO counters VALUES (?,?,?)",
-                            (self.repo_id, ckey, n))
-            self.db.commit()
-        except Exception:
-            pass
+            for token_b, enc in self.r.hgetall(self._k("enc")).items():
+                token = token_b.decode()
+                value = self._decrypt(enc, self.scheme)
+                session["vault"][value] = token
+                session["rev_vault"][token] = value
+            for k in self.r.scan_iter(self._k("ctr:*")):
+                ckey = k.decode().rsplit(":ctr:", 1)[-1]
+                session["tok_count"][ckey] = int(self.r.get(k))
+        except Exception as e:
+            print(f"[vault_store] redis hydrate failed: {e}")
 
     def stats(self) -> dict:
-        if not self.enabled:
-            return {"enabled": False}
+        n = 0
+        if self.enabled:
+            try:
+                n = self.r.hlen(self._k("enc"))
+            except Exception:
+                pass
+        return {"backend": "redis", "enabled": self.enabled,
+                "scheme": self.scheme, "mappings": n, "repo_id": self.repo_id}
+
+
+def get_vault_store(repo_id: str):
+    """Pick the shared Redis store when configured + allowed, else local SQLite.
+    Fails soft to SQLite so scanning never breaks."""
+    url = os.environ.get("LOCALMASK_VAULT_REDIS_URL")
+    if url:
         try:
-            n = self.db.execute(
-                "SELECT COUNT(*) FROM vault WHERE repo_id=?",
-                (self.repo_id,)).fetchone()[0]
+            from ._edition import has_capability
+            allowed = has_capability("shared_vault")
         except Exception:
-            n = 0
-        return {"enabled": True, "scheme": self.scheme, "mappings": n,
-                "repo_id": self.repo_id, "db": _DB}
+            allowed = True
+        if allowed:
+            store = RedisVaultStore(repo_id, url)
+            if store.enabled:
+                return store
+            print("[vault_store] using local SQLite (redis not reachable)")
+    return SqliteVaultStore(repo_id)
+
+
+# Back-compat alias
+VaultStore = SqliteVaultStore

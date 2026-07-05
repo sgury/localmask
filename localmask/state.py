@@ -146,10 +146,10 @@ def _new_session(src: str, temp: bool, persist: bool | None = None) -> dict:
     }
     if persist:
         try:
-            from .vault_store import VaultStore, repo_id_for
-            store = VaultStore(repo_id_for(src))
+            from .vault_store import get_vault_store, repo_id_for
+            store = get_vault_store(repo_id_for(src))  # shared Redis or local
             if store.enabled:
-                store.hydrate(session)        # seed stable tokens from disk
+                store.hydrate(session)        # seed stable tokens from disk/redis
                 session["_store"] = store
         except Exception as e:
             print(f"[state] vault persistence unavailable: {e}")

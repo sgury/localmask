@@ -3,20 +3,36 @@ import re
 
 
 def _make_token(session: dict, value: str, subtype: str) -> str:
-    """Return existing token or mint a new one. New mappings are written through
-    to the persistent vault store (if attached) so tokens survive restarts."""
+    """Return existing token or mint a new one.
+
+    With a vault store attached, minting is atomic and race-safe (reserve the
+    counter, then put-if-absent) so a shared/team store never collides across
+    machines; without one, it's the plain in-memory counter."""
     if value in session["vault"]:
         return session["vault"][value]
     key = subtype.upper().replace(" ", "_").replace("-", "_")
+    store = session.get("_store")
+
+    if store is not None:
+        # another machine/session may already have tokenised this value
+        existing = store.token_for(value)
+        if existing:
+            session["vault"][value] = existing
+            session["rev_vault"][existing] = value
+            return existing
+        n = store.reserve(key)                       # atomic across machines
+        token = f"~[{key}_{n}]~"
+        winner = store.put_if_absent(value, token, subtype)  # race-safe
+        session["vault"][value] = winner
+        session["rev_vault"][winner] = value
+        session["tok_count"][key] = max(session["tok_count"].get(key, 0), n + 1)
+        return winner
+
     n = session["tok_count"].get(key, 0)
     session["tok_count"][key] = n + 1
     token = f"~[{key}_{n}]~"
     session["vault"][value] = token
     session["rev_vault"][token] = value
-    store = session.get("_store")
-    if store is not None:
-        store.put(value, token, subtype)
-        store.set_counter(key, n + 1)
     return token
 
 

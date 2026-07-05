@@ -15,7 +15,7 @@ license-gated (single-tree dev). `capabilities()` reconciles both.
 import os
 
 # Overwritten at build time by build-dist.sh. Env var wins for dev/testing.
-EDITION = os.environ.get("LOCALMASK_EDITION", "free")
+EDITION = os.environ.get("LOCALMASK_EDITION", "pro")
 
 # Capability → minimum edition that includes it.
 _CAP_MIN_EDITION = {
@@ -31,10 +31,12 @@ _CAP_MIN_EDITION = {
     "ask_ai":         "pro",    # cloud Q&A over masked repo (only egress)
     "ai_proxy":       "pro",    # prompt-firewall proxy (BYO AI, masked egress)
     "review_edit":    "free",   # manually edit detections: mask / allow / teach
-    "org_rules":      "ent",    # shared team rules server
+    "org_rules":      "team",   # shared team rules server
+    "shared_vault":   "team",   # team-wide Redis token vault (consistent tokens)
+    "ldap_auth":      "ent",    # LDAP/AD auth + group→tier mapping
 }
 
-_ORDER = {"free": 0, "pro": 1, "ent": 2}
+_ORDER = {"free": 0, "pro": 1, "team": 2, "ent": 3}
 
 
 def _license_tier() -> str:
@@ -73,6 +75,7 @@ def _source_present(cap: str) -> bool:
         "learning": "sensitivity_classifier",
         "ask_ai": "localmask.askai",
         "ai_proxy": "localmask.proxy",
+        "ldap_auth": "localmask.ldap_auth",
     }.get(cap)
     if not needed_module:
         return True
