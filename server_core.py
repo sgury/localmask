@@ -521,6 +521,15 @@ class LocalMaskEngine:
             if tok:
                 session["rev_vault"].pop(tok, None)
 
+        # Write through to the persistent lexicon so this teaches the value for
+        # every future scan/sync of this repo (and, on a shared vault, the team).
+        store = session.get("_store")
+        if store is not None:
+            try:
+                store.set_lexicon(value, action=action, subtype=subtype)
+            except Exception:
+                pass
+
         _remask(session)
         scan["detections"] = _flatten_detections(session)
         scan["summary_stats"] = _scan_stats(scan["detections"], session)

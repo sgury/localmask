@@ -150,6 +150,7 @@ def _new_session(src: str, temp: bool, persist: bool | None = None) -> dict:
             store = get_vault_store(repo_id_for(src))  # shared Redis or local
             if store.enabled:
                 store.hydrate(session)        # seed stable tokens from disk/redis
+                store.load_lexicon(session)   # seed taught/ignored values
                 session["_store"] = store
         except Exception as e:
             print(f"[state] vault persistence unavailable: {e}")

@@ -63,11 +63,18 @@ edits are **free**, no model required:
 # Ignore a false positive (stop masking this value)
 localmask review            # interactive: mark detections keep / ignore
 
-# Teach it a value the patterns missed (always mask this)
-# (done through the review UI or the MCP tools below)
+# Teach a secret the patterns MISSED (always mask this value)
+localmask teach <scan_id> "the-exact-missed-value" --subtype API_KEY
+localmask teach <scan_id> "a-false-positive" --allow      # or: never mask it
+
+# …or do it inside the review UI: press [T] to teach a missed value,
+# and it re-scans in place so you see it masked immediately.
 ```
 
-Ignoring and teaching update a local lexicon that applies on the next scan/sync.
+Ignoring and teaching update a **persistent local lexicon** (stored encrypted
+next to the vault, keyed by repo), so they apply automatically on **every future
+scan and sync** of that repo — even in a fresh process. On a Team/Enterprise
+shared vault, taught values propagate to the whole team.
 
 ## Publish a masked copy
 

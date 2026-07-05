@@ -293,18 +293,21 @@ class HierarchicalReviewer:
     """Interactive 3-level detection reviewer: Type -> Instances -> Single."""
 
     def __init__(self, detections: list, repo_label: str = "",
-                 save_callback=None, repo_root: str = "", mode: str = "SERVICE"):
+                 save_callback=None, repo_root: str = "", mode: str = "SERVICE",
+                 teach_callback=None):
         self.repo_label = repo_label
         self.repo_root = repo_root or os.getcwd()
         self.detections = detections
         self._save_callback = save_callback
+        self._teach_callback = teach_callback
         self.mode = mode
+        self._regroup()
 
-        # Group by type
+    def _regroup(self):
+        """(Re)build the type groupings from self.detections."""
         self.types = {}
         for d in self.detections:
             self.types.setdefault(d.det_type, []).append(d)
-
         # Sort types by avg confidence (highest first)
         self.type_order = sorted(
             self.types.keys(),
@@ -343,6 +346,33 @@ class HierarchicalReviewer:
         if self._save_callback:
             self._save_callback(self.detections)
 
+    def _teach_missed(self):
+        """Prompt for a secret the scanner missed, teach it, and reload the
+        detection list so the newly-masked value shows up immediately."""
+        self._clear()
+        print(f"\n{BOLD}  Teach a missed secret{RESET}\n")
+        print(f"  {DIM}Paste the exact value the scanner should have masked "
+              f"(blank to cancel).{RESET}\n")
+        value = self._input(f"  {BOLD}→ Value: {RESET}")
+        if not value:
+            return
+        subtype = self._input(
+            f"  {BOLD}→ Token type{RESET} {DIM}(e.g. API_KEY, PASSWORD; "
+            f"default SECRET): {RESET}") or "SECRET"
+        print(f"\n  {DIM}Teaching + re-scanning…{RESET}")
+        try:
+            fresh = self._teach_callback(value, subtype)
+        except Exception as e:
+            print(f"  {RED}✗ Teach failed: {e}{RESET}")
+            self._input("  Press Enter to continue...")
+            return
+        if fresh is not None:
+            self.detections = fresh
+            self._regroup()
+        print(f"  {GREEN}✓ Now masking that value as a "
+              f"{subtype.upper().replace(' ', '_')} token.{RESET}")
+        self._input("  Press Enter to continue...")
+
     # ── LEVEL 1: Type Selection ─────────────────────────────────────────────
 
     def show_type_summary(self):
@@ -379,20 +409,25 @@ class HierarchicalReviewer:
                 print(f"  {BOLD}[{i:>2}]{RESET} {CYAN}{t:<30}{RESET} "
                       f"{count:>3} detections  {bar} {avg_conf:.0%}{status}")
 
+            teach_hint = "  [T]each a missed secret" if self._teach_callback else ""
             print(f"\n  {DIM}Navigation: [1-{len(self.type_order)}] select type  "
-                  f"[S]ave  [Q]uit{RESET}")
+                  f"[S]ave{teach_hint}  [Q]uit{RESET}")
             print()
 
             choice = self._input(f"  {BOLD}→ Choose: {RESET}")
 
             if choice.lower() == "q":
                 self._save_decisions()
-                print(f"\n  {GREEN}✓ Decisions synced to service{RESET}\n")
+                where = "locally" if self.mode == "LOCAL" else "to service"
+                print(f"\n  {GREEN}✓ Decisions saved {where}{RESET}\n")
                 return
             if choice.lower() == "s":
                 self._save_decisions()
                 print(f"\n  {GREEN}✓ Saved!{RESET}")
                 self._input("  Press Enter to continue...")
+                continue
+            if choice.lower() == "t" and self._teach_callback:
+                self._teach_missed()
                 continue
 
             try:
@@ -1097,6 +1132,18 @@ The AI only sees masked content — real secrets are replaced with tokens.
                        help="AI provider name")
     key_p.add_argument("key", help="API key value")
 
+    # teach — add a secret the scanner missed (or ignore a false positive),
+    #         persisted so it applies on every future scan/sync of this repo.
+    teach_p = sub.add_parser(
+        "teach", help="Teach a missed secret (or ignore a false positive)")
+    teach_p.add_argument("scan_id", help="Scan ID to apply the value to")
+    teach_p.add_argument("value", help="The exact secret value the scanner missed")
+    teach_p.add_argument("--subtype", "-s", default="SECRET",
+                         help="Token type/name for the masked value (e.g. API_KEY)")
+    teach_p.add_argument("--allow", action="store_true",
+                        help="Instead of masking, mark this value as a false "
+                             "positive (never mask it)")
+
     # publish
     pub_p = sub.add_parser("publish", help="Publish masked repo to a git remote")
     pub_p.add_argument("scan_id", help="Scan ID of an approved scan")
@@ -1398,19 +1445,24 @@ The AI only sees masked content — real secrets are replaced with tokens.
         scan_id = args.scan_id
         if not _is_connected():
             eng = _local_engine()
-            data = eng.get_detections(scan_id)
-            repo_url = data.get("repo_url", scan_id)
-            dets = []
-            for d in data.get("detections", []):
-                det = Detection(
-                    det_id=d["det_id"], token=d["token"], det_type=d["type"],
-                    line=d.get("line", 0), confidence=d.get("confidence", 0.9),
-                    file=d.get("file", ""), context_lines=d.get("context_lines", []))
-                if d.get("decision") == "approved":
-                    det.decision = True
-                elif d.get("decision") == "rejected":
-                    det.decision = False
-                dets.append(det)
+
+            def _load_dets():
+                data = eng.get_detections(scan_id)
+                out = []
+                for d in data.get("detections", []):
+                    det = Detection(
+                        det_id=d["det_id"], token=d["token"], det_type=d["type"],
+                        line=d.get("line", 0), confidence=d.get("confidence", 0.9),
+                        file=d.get("file", ""),
+                        context_lines=d.get("context_lines", []))
+                    if d.get("decision") == "approved":
+                        det.decision = True
+                    elif d.get("decision") == "rejected":
+                        det.decision = False
+                    out.append(det)
+                return data.get("repo_url", scan_id), out
+
+            repo_url, dets = _load_dets()
             print(f"  {GREEN}✓ {len(dets)} detections loaded (local){RESET}\n")
 
             def save_local(detections):
@@ -1420,8 +1472,21 @@ The AI only sees masked content — real secrets are replaced with tokens.
                     eng.review_detections(scan_id, decisions)
                     print(f"  {GREEN}✓ Saved {len(decisions)} decisions locally{RESET}")
 
+            def teach_local(value, subtype):
+                # Persist to the repo lexicon, then re-scan in place so the
+                # newly-masked value appears; return the refreshed detections.
+                from server_core import _get_or_load_scan
+                from localmask.vault_store import get_vault_store, repo_id_for
+                sc = _get_or_load_scan(scan_id)
+                src = sc.get("repo_url", "") if sc else ""
+                get_vault_store(repo_id_for(src)).set_lexicon(
+                    value, action="mask", subtype=subtype)
+                eng.sync_repo(scan_id)
+                _, fresh = _load_dets()
+                return fresh
+
             HierarchicalReviewer(dets, repo_url, save_callback=save_local,
-                                 mode="LOCAL").run()
+                                 mode="LOCAL", teach_callback=teach_local).run()
             return
 
         client = _get_client()
@@ -1626,6 +1691,40 @@ The AI only sees masked content — real secrets are replaced with tokens.
         print(f"  {DIM}Pushed to:{RESET}  {result.get('pushed_to', args.target_url)}")
         print(f"  {DIM}Files:{RESET}      {result.get('files', '?')}")
         _print_grant_guide(args.target_url, args.scan_id)
+
+    # ── teach (add a missed secret / ignore a false positive) ────────────
+    elif args.command == "teach":
+        scan_id = args.scan_id
+        value = args.value
+        action = "allow" if args.allow else "mask"
+        if not _is_connected():
+            from server_core import _get_or_load_scan
+            from localmask.vault_store import get_vault_store, repo_id_for
+            sc = _get_or_load_scan(scan_id)
+            if not sc:
+                print(f"  {RED}✗ Scan not found: {scan_id}{RESET}")
+                return
+            src = sc.get("repo_url", "")
+            # 1) Persist to the repo's lexicon so it applies on every scan/sync.
+            store = get_vault_store(repo_id_for(src))
+            store.set_lexicon(value, action=action, subtype=args.subtype)
+            verb = "ignore" if action == "allow" else "mask"
+            print(f"  {GREEN}✓ Taught: will always {verb} this value{RESET} "
+                  f"{DIM}(repo lexicon){RESET}")
+            # 2) Re-scan in place so the change is visible now (tokens stay stable).
+            eng = _local_engine()
+            result = eng.sync_repo(scan_id)
+            total = result.get("total_detections", 0)
+            print(f"  {DIM}Re-scanned:{RESET}  {total} detections now "
+                  f"({CYAN}{scan_id}{RESET})")
+            if action == "mask":
+                print(f"  {DIM}Review/publish as usual; the value is now "
+                      f"masked as a {args.subtype} token.{RESET}")
+            return
+        client = _get_client()
+        client._req("POST", f"/api/repos/{scan_id}/teach",
+                    {"value": value, "action": action, "subtype": args.subtype})
+        print(f"  {GREEN}✓ Taught (service).{RESET}")
 
     # ── sync ────────────────────────────────────────────────────────────
     elif args.command == "sync":

@@ -112,6 +112,11 @@ class SqliteVaultStore(_Crypto):
                 ON vault(repo_id, token)""")
             self.db.execute("""CREATE TABLE IF NOT EXISTS counters (
                 repo_id TEXT, ckey TEXT, n INTEGER, PRIMARY KEY (repo_id, ckey))""")
+            # User lexicon: values the user taught (mask) or ignored (allow), so
+            # they persist across scans/syncs/processes. Encrypted at rest.
+            self.db.execute("""CREATE TABLE IF NOT EXISTS lexicon (
+                repo_id TEXT, vhash TEXT, action TEXT, subtype TEXT,
+                enc BLOB, scheme TEXT, ts REAL, PRIMARY KEY (repo_id, vhash))""")
             self.db.commit()
             try:
                 os.chmod(db_path, 0o600)
@@ -183,6 +188,51 @@ class SqliteVaultStore(_Crypto):
                 session["tok_count"][ckey] = n
         except Exception as e:
             print(f"[vault_store] hydrate failed: {e}")
+
+    # ── User lexicon (taught / ignored values) ───────────────────────────────
+    def set_lexicon(self, value: str, action: str = "mask",
+                    subtype: str = "SECRET"):
+        """Persist a user-taught (action='mask') or ignored (action='allow')
+        value so it applies on every future scan/sync of this repo."""
+        if not self.enabled:
+            return
+        try:
+            self.db.execute(
+                "INSERT OR REPLACE INTO lexicon VALUES (?,?,?,?,?,?,?)",
+                (self.repo_id, self._vhash(value), action, subtype,
+                 self._encrypt(value), self.scheme, time.time()))
+            self.db.commit()
+        except Exception:
+            pass
+
+    def remove_lexicon(self, value: str):
+        if not self.enabled:
+            return
+        try:
+            self.db.execute("DELETE FROM lexicon WHERE repo_id=? AND vhash=?",
+                            (self.repo_id, self._vhash(value)))
+            self.db.commit()
+        except Exception:
+            pass
+
+    def load_lexicon(self, session: dict):
+        """Seed session['taught'] / session['allowed'] from the persisted lexicon."""
+        if not self.enabled:
+            return
+        try:
+            for action, subtype, enc, scheme in self.db.execute(
+                    "SELECT action, subtype, enc, scheme FROM lexicon "
+                    "WHERE repo_id=?", (self.repo_id,)):
+                value = self._decrypt(enc, scheme)
+                if action == "mask":
+                    session.setdefault("taught", {})[value] = {
+                        "subtype": subtype or "SECRET"}
+                    session.setdefault("allowed", set()).discard(value)
+                else:
+                    session.setdefault("allowed", set()).add(value)
+                    session.setdefault("taught", {}).pop(value, None)
+        except Exception as e:
+            print(f"[vault_store] load_lexicon failed: {e}")
 
     def stats(self) -> dict:
         n = 0
@@ -263,6 +313,47 @@ class RedisVaultStore(_Crypto):
                 session["tok_count"][ckey] = int(self.r.get(k))
         except Exception as e:
             print(f"[vault_store] redis hydrate failed: {e}")
+
+    # ── User lexicon (taught / ignored values), shared across the team ────────
+    def set_lexicon(self, value: str, action: str = "mask",
+                    subtype: str = "SECRET"):
+        if not self.enabled:
+            return
+        vh = self._vhash(value)
+        self.r.hset(self._k("lex"), vh, action)
+        self.r.hset(self._k("lexenc"), vh, self._encrypt(value))
+        self.r.hset(self._k("lexsub"), vh, subtype or "SECRET")
+
+    def remove_lexicon(self, value: str):
+        if not self.enabled:
+            return
+        vh = self._vhash(value)
+        self.r.hdel(self._k("lex"), vh)
+        self.r.hdel(self._k("lexenc"), vh)
+        self.r.hdel(self._k("lexsub"), vh)
+
+    def load_lexicon(self, session: dict):
+        if not self.enabled:
+            return
+        try:
+            actions = self.r.hgetall(self._k("lex"))
+            encs = self.r.hgetall(self._k("lexenc"))
+            subs = self.r.hgetall(self._k("lexsub"))
+            for vh_b, action_b in actions.items():
+                action = action_b.decode()
+                enc = encs.get(vh_b)
+                if enc is None:
+                    continue
+                value = self._decrypt(enc, self.scheme)
+                if action == "mask":
+                    subtype = subs.get(vh_b, b"SECRET").decode()
+                    session.setdefault("taught", {})[value] = {"subtype": subtype}
+                    session.setdefault("allowed", set()).discard(value)
+                else:
+                    session.setdefault("allowed", set()).add(value)
+                    session.setdefault("taught", {}).pop(value, None)
+        except Exception as e:
+            print(f"[vault_store] redis load_lexicon failed: {e}")
 
     def stats(self) -> dict:
         n = 0
