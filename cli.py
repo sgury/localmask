@@ -191,6 +191,30 @@ def _local_engine():
     return LocalMaskEngine()
 
 
+def _count_occurrences(src: str, value: str) -> int:
+    """How many times the literal value appears across the scanned files —
+    the ground truth for 'is this value actually in the code'. Best-effort:
+    walks text files under src, skips .git and unreadable/binary files."""
+    if not value:
+        return 0
+    root = src if os.path.isabs(src) else os.path.join(os.getcwd(), src)
+    if not os.path.isdir(root):
+        return 0
+    total = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for fn in filenames:
+            fp = os.path.join(dirpath, fn)
+            try:
+                if os.path.getsize(fp) > 5_000_000:
+                    continue
+                with open(fp, "r", errors="ignore") as f:
+                    total += f.read().count(value)
+            except (OSError, ValueError):
+                continue
+    return total
+
+
 def _print_grant_guide(target_url: str, scan_id: str):
     """Simple next-steps: two ways to let the AI read the masked code. LocalMask
     never hands the AI any credentials."""
@@ -361,7 +385,7 @@ class HierarchicalReviewer:
             f"default SECRET): {RESET}") or "SECRET"
         print(f"\n  {DIM}Teaching + re-scanning…{RESET}")
         try:
-            fresh = self._teach_callback(value, subtype)
+            fresh, hits = self._teach_callback(value, subtype)
         except Exception as e:
             print(f"  {RED}✗ Teach failed: {e}{RESET}")
             self._input("  Press Enter to continue...")
@@ -369,8 +393,14 @@ class HierarchicalReviewer:
         if fresh is not None:
             self.detections = fresh
             self._regroup()
-        print(f"  {GREEN}✓ Now masking that value as a "
-              f"{subtype.upper().replace(' ', '_')} token.{RESET}")
+        tok = subtype.upper().replace(" ", "_")
+        if hits:
+            occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
+            print(f"  {GREEN}✓ Found {occ} — added to this review, "
+                  f"masked as a {tok} token.{RESET}")
+        else:
+            print(f"  {YELLOW}⚠ Not found in the scanned code{RESET} — "
+                  f"check the value (whitespace/quotes?). Saved for future scans.")
         self._input("  Press Enter to continue...")
 
     # ── LEVEL 1: Type Selection ─────────────────────────────────────────────
@@ -1474,16 +1504,19 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
             def teach_local(value, subtype):
                 # Persist to the repo lexicon, then re-scan in place so the
-                # newly-masked value appears; return the refreshed detections.
+                # newly-masked value appears. Returns (refreshed_dets, hits)
+                # where hits is how many times the value occurs in the code.
                 from server_core import _get_or_load_scan
                 from localmask.vault_store import get_vault_store, repo_id_for
                 sc = _get_or_load_scan(scan_id)
                 src = sc.get("repo_url", "") if sc else ""
+                hits = _count_occurrences(src, value)
                 get_vault_store(repo_id_for(src)).set_lexicon(
                     value, action="mask", subtype=subtype)
-                eng.sync_repo(scan_id)
+                if hits:
+                    eng.sync_repo(scan_id)
                 _, fresh = _load_dets()
-                return fresh
+                return fresh, hits
 
             HierarchicalReviewer(dets, repo_url, save_callback=save_local,
                                  mode="LOCAL", teach_callback=teach_local).run()
@@ -1705,21 +1738,29 @@ The AI only sees masked content — real secrets are replaced with tokens.
                 print(f"  {RED}✗ Scan not found: {scan_id}{RESET}")
                 return
             src = sc.get("repo_url", "")
+            # 0) Is the value actually present in the scanned code?
+            hits = _count_occurrences(src, value)
             # 1) Persist to the repo's lexicon so it applies on every scan/sync.
             store = get_vault_store(repo_id_for(src))
             store.set_lexicon(value, action=action, subtype=args.subtype)
             verb = "ignore" if action == "allow" else "mask"
             print(f"  {GREEN}✓ Taught: will always {verb} this value{RESET} "
                   f"{DIM}(repo lexicon){RESET}")
+            if hits == 0:
+                print(f"  {YELLOW}⚠ Not found in the scanned code{RESET} — "
+                      f"double-check the value (whitespace/quotes?). Saved to the "
+                      f"lexicon; it'll apply if it appears in a future scan.")
+                return
             # 2) Re-scan in place so the change is visible now (tokens stay stable).
             eng = _local_engine()
             result = eng.sync_repo(scan_id)
             total = result.get("total_detections", 0)
-            print(f"  {DIM}Re-scanned:{RESET}  {total} detections now "
-                  f"({CYAN}{scan_id}{RESET})")
+            occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
+            print(f"  {GREEN}✓ Found {occ}{RESET} — added to the review "
+                  f"({total} detections now, {CYAN}{scan_id}{RESET})")
             if action == "mask":
-                print(f"  {DIM}Review/publish as usual; the value is now "
-                      f"masked as a {args.subtype} token.{RESET}")
+                print(f"  {DIM}The value is now masked as a {args.subtype} "
+                      f"token; review/publish as usual.{RESET}")
             return
         client = _get_client()
         client._req("POST", f"/api/repos/{scan_id}/teach",
