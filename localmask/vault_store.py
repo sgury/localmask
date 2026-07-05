@@ -379,6 +379,50 @@ class RedisVaultStore(_Crypto):
                 "scheme": self.scheme, "mappings": n, "repo_id": self.repo_id}
 
 
+class _LocalCredStore(_Crypto):
+    """Local, encrypted git-credential store for the free/offline CLI. Tokens
+    are encrypted at rest with the per-machine key; only a random credential_id
+    is ever shown or passed on the command line — the token itself never appears
+    in argv, shell history, or the scan record."""
+
+    def __init__(self, db_path: str = _DB):
+        self._init_crypto(_local_key())
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
+        self.db.execute("""CREATE TABLE IF NOT EXISTS credentials (
+            cred_id TEXT PRIMARY KEY, label TEXT, enc BLOB, scheme TEXT, ts REAL)""")
+        self.db.commit()
+        try:
+            os.chmod(db_path, 0o600)
+        except OSError:
+            pass
+
+    def store(self, token: str, label: str = "") -> str:
+        cred_id = "cred_" + secrets.token_hex(6)
+        self.db.execute("INSERT INTO credentials VALUES (?,?,?,?,?)",
+                        (cred_id, label, self._encrypt(token), self.scheme,
+                         time.time()))
+        self.db.commit()
+        return cred_id
+
+    def get(self, cred_id: str):
+        row = self.db.execute(
+            "SELECT enc, scheme FROM credentials WHERE cred_id=?",
+            (cred_id,)).fetchone()
+        return self._decrypt(row[0], row[1]) if row else None
+
+
+def store_local_credential(token: str, label: str = "") -> str:
+    return _LocalCredStore().store(token, label)
+
+
+def get_local_credential(cred_id: str):
+    try:
+        return _LocalCredStore().get(cred_id)
+    except Exception:
+        return None
+
+
 def get_vault_store(repo_id: str):
     """Pick the shared Redis store when configured + allowed, else local SQLite.
     Fails soft to SQLite so scanning never breaks."""

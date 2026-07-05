@@ -215,6 +215,37 @@ def _count_occurrences(src: str, value: str) -> int:
     return total
 
 
+def _publish_error_help(err: str, target_url: str, had_token: bool):
+    """Turn a git push failure into a clear, actionable message (no traceback)."""
+    low = err.lower()
+    print(f"  {RED}✗ Publish failed.{RESET}")
+    _auth = ("authentication failed", "invalid username or token",
+             "password authentication", "403", "could not read username",
+             "could not read password", "terminal prompts disabled",
+             "authentication required")
+    if any(s in low for s in _auth):
+        print(f"  {YELLOW}Authentication was rejected by the remote.{RESET}")
+        if not had_token:
+            print(f"  {DIM}No token was used.{RESET} GitHub/GitLab need a Personal "
+                  f"Access Token with {BOLD}repo{RESET} scope to push. Either:")
+            print(f"    1) {CYAN}localmask store-token{RESET}   "
+                  f"{DIM}(type it hidden → get a credential id){RESET}")
+            print(f"       {CYAN}localmask publish <scan> {target_url} -c <cred_id>{RESET}")
+            print(f"    2) or a one-off: {CYAN}localmask publish <scan> {target_url} "
+                  f"--token <PAT>{RESET} {DIM}(leaks into shell history){RESET}")
+        else:
+            print(f"  {DIM}The token was rejected — it may be expired, revoked, or "
+                  f"missing the {RESET}{BOLD}repo{RESET}{DIM} scope. Create a fresh "
+                  f"PAT and store it again with `localmask store-token`.{RESET}")
+    elif "not found" in low or "repository not found" in low or "does not exist" in low:
+        print(f"  {YELLOW}The target repo doesn't exist yet.{RESET} Create an "
+              f"{BOLD}empty{RESET} repo at {CYAN}{target_url}{RESET} first "
+              f"(no README), then re-run publish.")
+    else:
+        print(f"  {DIM}{err[:300]}{RESET}")
+    print(f"  {DIM}Nothing was pushed; your secrets never left this machine.{RESET}")
+
+
 def _print_grant_guide(target_url: str, scan_id: str):
     """Simple next-steps: two ways to let the AI read the masked code. LocalMask
     never hands the AI any credentials."""
@@ -1125,8 +1156,11 @@ The AI only sees masked content — real secrets are replaced with tokens.
     conn_p.add_argument("url", help="Service URL (e.g. https://localmask-pro-xxx.run.app)")
 
     # store-token
-    store_p = sub.add_parser("store-token", help="Store git token securely on the service")
-    store_p.add_argument("token", help="Git PAT (sent once over HTTPS, stored server-side)")
+    store_p = sub.add_parser("store-token",
+                             help="Store a git token (free: encrypted locally; typed hidden)")
+    store_p.add_argument("token", nargs="?", default="",
+                         help="Git PAT. Omit to type it hidden (recommended — "
+                              "an argument leaks into shell history).")
     store_p.add_argument("--label", default="", help="Optional label for this credential")
 
     # scan
@@ -1330,12 +1364,32 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
     # ── hosted-only commands: give a clear local-mode message (not a raw
     #    "not connected" error) plus the free-edition alternative. ────────────
-    if args.command in ("store-token", "submit", "approve-all", "set-key") \
+    if args.command == "store-token" and not _is_connected():
+        import getpass
+        token = (args.token or "").strip()
+        if not token or token == "-":
+            try:
+                token = getpass.getpass("  Paste git token (hidden): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                token = ""
+        if not token:
+            print(f"  {RED}✗ No token provided.{RESET}")
+            return
+        from localmask.vault_store import store_local_credential
+        cid = store_local_credential(token, args.label or "")
+        print(f"  {GREEN}✓ Stored (encrypted, local — 0600 SQLite){RESET}")
+        print(f"  {DIM}Credential ID:{RESET} {CYAN}{cid}{RESET}")
+        print(f"  {DIM}Use it:{RESET} localmask publish <scan> <url> -c {cid}")
+        print(f"  {DIM}or:{RESET}     localmask scan <private-url> -c {cid}")
+        if token.startswith("ghp_") and args.token:
+            print(f"  {YELLOW}⚠ You passed the token on the command line — it's "
+                  f"now in your shell history.{RESET} Run store-token with no "
+                  f"argument next time so it's typed hidden; and rotate this one.")
+        return
+
+    if args.command in ("submit", "approve-all", "set-key") \
             and not _is_connected():
         _hint = {
-            "store-token": "In free, pass a git token per command with "
-                           "`--token <tok>`, or use your system git "
-                           "credentials (e.g. `gh auth login`).",
             "set-key":     "In free, pass your AI key inline: "
                            "`localmask ask <scan> \"...\" --provider openai "
                            "--api-key sk-...`, or via env "
@@ -1398,9 +1452,26 @@ The AI only sees masked content — real secrets are replaced with tokens.
             print(f"\n  {CYAN}[LOCAL]{RESET} Scanning on this machine "
                   f"(nothing leaves your computer)...", flush=True)
             eng = _local_engine()
-            result = eng.scan_repo(
-                source=os.path.expanduser(args.repo_url),
-                sensitivity=args.sensitivity, org=args.org)
+            # Private remote? Resolve a locally-stored credential into a token.
+            token = ""
+            if args.credential_id:
+                from localmask.vault_store import get_local_credential
+                token = get_local_credential(args.credential_id) or ""
+                if not token:
+                    print(f"  {RED}✗ Unknown credential id "
+                          f"'{args.credential_id}'.{RESET} Run "
+                          f"`localmask store-token` first.")
+                    return
+            try:
+                result = eng.scan_repo(
+                    source=os.path.expanduser(args.repo_url),
+                    sensitivity=args.sensitivity, org=args.org, token=token)
+            except Exception as e:
+                print(f"  {RED}✗ Scan failed:{RESET} {str(e)[:300]}")
+                if "clone failed" in str(e).lower() or "authentication" in str(e).lower():
+                    print(f"  {DIM}For a private repo, add a token: "
+                          f"localmask store-token → scan <url> -c <cred_id>.{RESET}")
+                return
             scan_id = result["scan_id"]
             stats = result.get("summary_stats", {})
             print(f"  {GREEN}✓ Scan complete{RESET}\n")
@@ -1688,10 +1759,24 @@ The AI only sees masked content — real secrets are replaced with tokens.
                 if args.credential_id:
                     _sc["credential_id"] = args.credential_id
                 _persist_scan(args.scan_id)
-            result = eng.publish_scan(
-                args.scan_id, args.target_url,
-                token=args.token, credential_id=args.credential_id,
-                username=args.username)
+            # Resolve a locally-stored credential id (from `store-token`) into a
+            # token, so the token never has to be passed on the command line.
+            token = args.token
+            if not token and args.credential_id:
+                from localmask.vault_store import get_local_credential
+                token = get_local_credential(args.credential_id) or ""
+                if not token:
+                    print(f"  {RED}✗ Unknown credential id "
+                          f"'{args.credential_id}'.{RESET} Run "
+                          f"`localmask store-token` to add one.")
+                    return
+            try:
+                result = eng.publish_scan(
+                    args.scan_id, args.target_url,
+                    token=token, credential_id="", username=args.username)
+            except Exception as e:
+                _publish_error_help(str(e), args.target_url, bool(token))
+                return
             print(f"  {GREEN}✓ Published masked repo{RESET}")
             print(f"  {DIM}Pushed to:{RESET}  {result.get('pushed_to', args.target_url)}")
             print(f"  {DIM}Files:{RESET}      {result.get('files', '?')}")
@@ -1790,8 +1875,11 @@ The AI only sees masked content — real secrets are replaced with tokens.
 
         if not _is_connected():
             eng = _local_engine()
-            result = eng.sync_repo(
-                scan_id, credential_id=args.credential_id or "")
+            _tok = ""
+            if args.credential_id:
+                from localmask.vault_store import get_local_credential
+                _tok = get_local_credential(args.credential_id) or ""
+            result = eng.sync_repo(scan_id, token=_tok)
             # Re-push the masked mirror if this scan has a publish target.
             # (sync_repo's built-in auto-republish only fires for 'approved'
             # scans; standalone free scans stay 'draft', so push explicitly.)

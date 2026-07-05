@@ -132,13 +132,21 @@ remote.
 For a private source or a private masked mirror, give LocalMask a token:
 
 ```bash
-localmask store-token ghp_your_token        # stored, returns a credential_id
+localmask store-token                        # prompts for the token HIDDEN,
+                                             # stores it encrypted, returns a credential_id
 localmask scan https://github.com/org/private.git -c <credential_id>
 localmask publish <scan> https://github.com/org/masked.git -c <credential_id>
 ```
 
-Or rely on the git credentials already on your machine (e.g. `gh auth`), or pass
-`--token` directly.
+The token is stored encrypted in a local 0600 SQLite file and only a random
+`credential_id` is ever passed on the command line — so your token never lands
+in your shell history or in `ps`. **Don't** pass the token as an argument
+(`store-token ghp_…`): that *does* leak into shell history. You can also rely on
+the git credentials already on your machine (e.g. `gh auth login`), or pass
+`--token` for a throwaway one-off.
+
+> Use a PAT with **`repo`** scope, and create the target mirror repo (empty, no
+> README) before `publish`.
 
 ## How the git integration stays secure
 
