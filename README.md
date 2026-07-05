@@ -121,19 +121,30 @@ code:** `localmask sync <scan>` re-masks and re-pushes the mirror (once approved
 and the AI runs `git pull`. (Because it's masked you *could* also make the mirror
 public and skip auth — no secrets are in it.)
 
-*Grant that access in one step:*
+*Grant that access in one step — pick how much (if anything) is handed over:*
 
 ```bash
+# Nothing transferred — the mirror is masked, so just make it public:
+localmask grant-ai <scan_id> --public
+#   → any AI clones it with NO credential at all.
+
+# Nothing transferred — the AI uses its OWN account:
+localmask grant-ai <scan_id> --collaborator <the-ai-bot-username>
+#   → grants that account read-only on this repo; the AI signs in as itself.
+
+# A dedicated, throwaway key IS handed to the AI (its own, not yours):
 localmask grant-ai <scan_id>
+#   → creates a read-only, single-repo SSH deploy key and prints the AI's
+#     private key + clone command.
 ```
 
-This creates a **read-only, per-repo SSH deploy key** and registers it on the
-masked mirror via the `gh` CLI, then prints the AI's private key path and the
-exact clone command to hand it. The key is read-only and scoped to *only* that
-repo — it can't touch your real code or anything else, and it isn't your git
-token. (If the AI runs on your machine — Claude Code, Cursor — it can just use
-the git you already have; `grant-ai` is for a remote/separate AI identity. To
-revoke: `gh repo deploy-key delete`.)
+**What is and isn't transferred:** LocalMask never shares *your* git token, SSH
+key, or account. `--public` and `--collaborator` transfer **nothing** to the AI.
+The default deploy-key mode hands the AI a **new, dedicated** credential that is
+read-only and scoped to **only** that one repo (a GitHub deploy key can't access
+any other repo or your account) — revoke it anytime with `gh repo deploy-key
+delete`. If the AI runs on your machine (Claude Code, Cursor), it can just use
+the git you already have and you don't need `grant-ai` at all.
 
 **B) The AI reads live from LocalMask — nothing published.** In your AI editor's
 MCP config, the assistant calls the `get_detections` and `get_file_masked` tools.

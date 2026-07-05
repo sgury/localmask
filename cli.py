@@ -1284,6 +1284,12 @@ The AI only sees masked content — real secrets are replaced with tokens.
                          help="Masked repo URL (default: the scan's publish target)")
     grant_p.add_argument("--title", default="localmask-ai-readonly",
                          help="Deploy-key title shown on GitHub")
+    grant_p.add_argument("--collaborator", default="",
+                         help="Grant an existing account (the AI's own bot user) "
+                              "read-only — transfers NOTHING to the AI")
+    grant_p.add_argument("--public", action="store_true",
+                         help="Make the masked mirror public (tokens only) — the "
+                              "AI reads it with no credential at all")
 
     # set-key
     # config — read/set local settings (e.g. the publish approval policy)
@@ -1562,6 +1568,35 @@ The AI only sees masked content — real secrets are replaced with tokens.
             print(f"  {RED}✗ No masked repo URL.{RESET} Publish the mirror first "
                   f"(`localmask publish {args.scan_id} <url>`) or pass --repo.")
             return
+        # ── Mode: public — no credential transferred at all (masked = safe) ──
+        if args.public:
+            from localmask.gitops import set_repo_public
+            print(f"\n  {CYAN}[LOCAL]{RESET} Making the masked mirror public "
+                  f"(tokens only, no secrets)…", flush=True)
+            r = set_repo_public(url)
+            if not r.get("ok"):
+                print(f"  {RED}✗ {r['message']}{RESET}"); return
+            print(f"  {GREEN}✓ Public.{RESET} Any AI reads it with "
+                  f"{BOLD}no credential{RESET} — nothing is transferred.")
+            print(f"  {DIM}The AI just clones:{RESET} git clone {r['https_url']}")
+            return
+        # ── Mode: collaborator — the AI uses its OWN account; nothing sent ────
+        if args.collaborator:
+            from localmask.gitops import add_readonly_collaborator
+            print(f"\n  {CYAN}[LOCAL]{RESET} Granting {CYAN}{args.collaborator}"
+                  f"{RESET} read-only on the masked mirror…", flush=True)
+            r = add_readonly_collaborator(url, args.collaborator)
+            if not r.get("ok"):
+                print(f"  {RED}✗ {r['message']}{RESET}"); return
+            print(f"  {GREEN}✓ Read-only access granted to "
+                  f"{args.collaborator}{RESET} {DIM}(their account, this repo "
+                  f"only){RESET}")
+            print(f"  {DIM}Nothing was transferred to the AI{RESET} — it signs in "
+                  f"with its own credentials and clones:")
+            print(f"    git clone {r['ssh_url']}")
+            print(f"  {DIM}(the invite may need one accept by that account.){RESET}")
+            return
+        # ── Default: dedicated per-repo read-only deploy key ─────────────────
         tgt = parse_git_target(url)
         safe = f"{tgt[1]}-{tgt[2]}" if tgt else "ai"
         key_path = os.path.join(CONFIG_DIR, "keys", f"{safe}-ai")

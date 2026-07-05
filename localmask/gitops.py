@@ -309,6 +309,50 @@ def add_readonly_deploy_key(url: str, key_path: str,
             "message": "deploy key already present" if already else "deploy key added"}
 
 
+def add_readonly_collaborator(url: str, username: str) -> dict:
+    """Invite an existing account (e.g. the AI's own bot account) as a READ-ONLY
+    collaborator. Nothing is transferred to the AI — it uses its OWN credentials;
+    you only grant its identity pull access to this one repo."""
+    tgt = parse_git_target(url)
+    if not tgt:
+        return {"ok": False, "message": f"unrecognized git URL: {url}"}
+    host, owner, repo = tgt
+    if host != "github.com":
+        return {"ok": False, "message": f"automated for GitHub only ({host})."}
+    if not _gh_cli_available():
+        return {"ok": False, "message": "the `gh` CLI is required."}
+    r = subprocess.run(
+        ["gh", "api", f"repos/{owner}/{repo}/collaborators/{username}",
+         "-X", "PUT", "-f", "permission=pull"],
+        capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        return {"ok": False,
+                "message": f"gh add-collaborator failed: {r.stderr.strip()[:200]}"}
+    return {"ok": True, "owner": owner, "repo": repo, "username": username,
+            "ssh_url": f"git@github.com:{owner}/{repo}.git",
+            "https_url": f"https://github.com/{owner}/{repo}.git"}
+
+
+def set_repo_public(url: str) -> dict:
+    """Make the masked mirror public. Safe because it contains only ~[TOKEN]~
+    placeholders — then ANY AI reads it with no credential at all."""
+    tgt = parse_git_target(url)
+    if not tgt:
+        return {"ok": False, "message": f"unrecognized git URL: {url}"}
+    host, owner, repo = tgt
+    if host != "github.com" or not _gh_cli_available():
+        return {"ok": False, "message": "automated for GitHub via the gh CLI only."}
+    r = subprocess.run(
+        ["gh", "repo", "edit", f"{owner}/{repo}", "--visibility", "public",
+         "--accept-visibility-change-consequences"],
+        capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        return {"ok": False, "message": f"gh visibility change failed: "
+                                        f"{r.stderr.strip()[:200]}"}
+    return {"ok": True, "owner": owner, "repo": repo,
+            "https_url": f"https://github.com/{owner}/{repo}.git"}
+
+
 def _git_tracked_files(src_dir: str) -> list[str] | None:
     """Return list of git-tracked relative paths, or None if not a git repo."""
     try:
