@@ -1573,7 +1573,10 @@ The AI only sees masked content — real secrets are replaced with tokens.
             return
         note = "already granted" if res.get("already") else "granted"
         print(f"  {GREEN}✓ Read-only access {note}{RESET} "
-              f"{DIM}(a per-repo deploy key — not your git token){RESET}\n")
+              f"{DIM}(a per-repo deploy key — not your git token){RESET}")
+        print(f"  {DIM}Scope:{RESET} this key works {BOLD}only{RESET} for "
+              f"{CYAN}{res['owner']}/{res['repo']}{RESET} — it can't touch your "
+              f"other repos or your account, and it's read-only.\n")
         print(f"  {BOLD}Hand your AI/agent these two things:{RESET}")
         print(f"    {DIM}1) its private key:{RESET} {CYAN}{res['key_path']}{RESET}")
         print(f"    {DIM}2) the clone command:{RESET}")
