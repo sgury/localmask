@@ -1,64 +1,93 @@
+import json
+import os
 import re
 
-# NER entity types we care about and their risk mapping
-NER_RISK = {
-    "PERSON":   {"risk": "MEDIUM", "level": "standard", "confidence": 0.82},
-    "ORG":      {"risk": "MEDIUM", "level": "standard", "confidence": 0.78},
-    "GPE":      {"risk": "LOW",    "level": "strict",   "confidence": 0.75},
-    "LOC":      {"risk": "LOW",    "level": "strict",   "confidence": 0.75},
-    "MONEY":    {"risk": "HIGH",   "level": "minimal",  "confidence": 0.88},
-    "CARDINAL": {"risk": "LOW",    "level": "strict",   "confidence": 0.70},
-    "DATE":     {"risk": "LOW",    "level": "strict",   "confidence": 0.70},
-    "FAC":      {"risk": "MEDIUM", "level": "standard", "confidence": 0.78},
-    "PRODUCT":  {"risk": "LOW",    "level": "strict",   "confidence": 0.72},
-    "EVENT":    {"risk": "LOW",    "level": "strict",   "confidence": 0.70},
-    "NORP":     {"risk": "LOW",    "level": "strict",   "confidence": 0.72},
+# ── NER detection data lives in ner_patterns.json (editable, persistent) ─────
+# Same design as regex_patterns.json: no hardcoded vocabulary in code. A tiny
+# built-in fallback keeps the scanner alive if the file is ever missing.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_NER_FALLBACK = {
+    "ner_risk": {"PERSON": {"risk": "MEDIUM", "level": "standard",
+                            "confidence": 0.82}},
+    "min_entity_len": 3,
+    "noise_keywords": ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE",
+                       "DROP", "ALTER", "FROM", "WHERE", "JOIN"],
+    "tech_terms": [],
+    "fallback_patterns": [],
 }
 
-# Minimum token length to avoid flagging very short noise
-MIN_ENTITY_LEN = 3
 
-# Only filter out obvious non-entities (single technical acronyms, SQL keywords)
-# Everything else goes to the LLM for classification
+def _resolve_ner_file() -> str:
+    env = os.environ.get("LOCALMASK_NER_FILE")
+    if env and os.path.exists(env):
+        return env
+    for cand in (os.path.join(_HERE, "ner_patterns.json"),
+                 os.path.join(_HERE, "localmask", "ner_patterns.json"),
+                 os.path.join(os.getcwd(), "ner_patterns.json")):
+        if os.path.exists(cand):
+            return cand
+    return os.path.join(_HERE, "ner_patterns.json")
+
+
+def _load_ner_data() -> dict:
+    global _NER_FILE
+    _NER_FILE = _resolve_ner_file()
+    try:
+        with open(_NER_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        for k, v in _NER_FALLBACK.items():
+            data.setdefault(k, v)
+        return data
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[ner_scanner] WARNING: could not load {_NER_FILE}: {exc}")
+        return dict(_NER_FALLBACK)
+
+
+_NER_FILE = ""
+_NER_DATA = _load_ner_data()
+
+# NER entity types we care about and their risk mapping
+NER_RISK = _NER_DATA["ner_risk"]
+
+# Minimum token length to avoid flagging very short noise
+MIN_ENTITY_LEN = _NER_DATA["min_entity_len"]
+
+# Only filter out obvious non-entities (SQL keywords). Built from the data file.
 _NOISE_FILTER = re.compile(
-    r'^(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|FROM|WHERE|JOIN)\b', re.I
+    r'^(?:' + "|".join(re.escape(k) for k in _NER_DATA["noise_keywords"])
+    + r')\b', re.I
 )
 
 # Public tech vocabulary — vendor names, infra roles, architecture labels.
 # An entity whose words ALL come from this set is never PII/ORG worth masking
 # (e.g. "Datadog Agent", "Platform Team", "Redis Cache").
-_TECH_TERMS = {
-    # vendors / products (public names, not secrets)
-    "datadog", "grafana", "prometheus", "kibana", "elastic", "elasticsearch",
-    "kafka", "redis", "postgres", "postgresql", "mysql", "mongodb", "nginx",
-    "docker", "kubernetes", "terraform", "ansible", "jenkins", "github",
-    "gitlab", "bitbucket", "slack", "jira", "confluence", "sentry", "splunk",
-    "pagerduty", "okta", "auth0", "stripe", "twilio", "sendgrid", "hubspot",
-    "celery", "flask", "django", "spring", "react", "angular", "vue",
-    "python", "java", "golang", "rabbitmq", "memcached", "haproxy", "consul",
-    "vault", "airflow", "spark", "hadoop", "snowflake", "databricks",
-    "fluentd", "logstash", "zookeeper", "cassandra", "dynamodb", "aurora",
-    # infra / architecture labels
-    "platform", "service", "services", "server", "servers", "gateway",
-    "engine", "pipeline", "pipelines", "cluster", "database", "cache",
-    "queue", "worker", "workers", "agent", "agents", "monitor",
-    "monitoring", "dashboard", "logging", "alerting", "backup", "restore",
-    "failover", "proxy", "balancer", "load", "primary", "replica", "shard",
-    "node", "nodes", "pod", "pods", "deployment", "ingress", "storage",
-    "network", "internal", "external", "core", "banking", "data", "web",
-    "api", "rest", "graphql", "oauth", "jwt", "sdk", "cli", "devops",
-    "backend", "frontend", "auth", "authentication", "authorization",
-    "config", "configuration", "infrastructure", "architecture", "diagram",
-    "overview", "schedule", "tier", "layer", "stack", "environment",
-    "production", "staging", "development", "sandbox", "document", "store",
-    "analytics", "metrics", "events", "stream", "batch", "compute",
-    # org-structure words (role labels, not people)
-    "team", "teams", "lead", "leads", "engineer", "engineering", "manager",
-    "director", "senior", "junior", "staff", "principal", "contacts",
-    "security", "compliance", "risk", "operations", "support",
-}
+_TECH_TERMS = {t.lower() for t in _NER_DATA["tech_terms"]}
 
 _WORD_SPLIT = re.compile(r"[\s/_\-.]+")
+
+
+def reload_ner_data():
+    """Re-read ner_patterns.json — pick up edits without restarting."""
+    global _NER_DATA, NER_RISK, MIN_ENTITY_LEN, _NOISE_FILTER, _TECH_TERMS
+    _NER_DATA = _load_ner_data()
+    NER_RISK = _NER_DATA["ner_risk"]
+    MIN_ENTITY_LEN = _NER_DATA["min_entity_len"]
+    _NOISE_FILTER = re.compile(
+        r'^(?:' + "|".join(re.escape(k) for k in _NER_DATA["noise_keywords"])
+        + r')\b', re.I)
+    _TECH_TERMS = {t.lower() for t in _NER_DATA["tech_terms"]}
+    NERScanner._FALLBACK_PATTERNS = _NER_DATA["fallback_patterns"]
+    return {"tech_terms": len(_TECH_TERMS),
+            "fallback_patterns": len(_NER_DATA["fallback_patterns"])}
+
+
+def add_tech_term(term: str, save: bool = True):
+    """Add a public-tech word (never masked as PII) and persist it."""
+    _TECH_TERMS.add(term.lower())
+    if term.lower() not in [t.lower() for t in _NER_DATA["tech_terms"]]:
+        _NER_DATA["tech_terms"].append(term.lower())
+    if save:
+        json.dump(_NER_DATA, open(_NER_FILE, "w"), indent=2)
 
 
 def _is_tech_term(text: str) -> bool:
@@ -152,29 +181,9 @@ class NERScanner:
 
     # ── Regex fallback ───────────────────────────────────────────────────
 
-    _FALLBACK_PATTERNS = [
-        # Proper names: two or more capitalised words
-        {
-            "pattern": r'\b([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){1,3})\b',
-            "label": "PERSON", "confidence": 0.68,
-            "level": "standard",
-            "reason": "Proper name (regex heuristic)",
-        },
-        # Money amounts
-        {
-            "pattern": r'\$\s*\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:million|billion|thousand|k|M|B))?\b',
-            "label": "MONEY", "confidence": 0.85,
-            "level": "minimal",
-            "reason": "Currency amount",
-        },
-        # Dates
-        {
-            "pattern": r'\b(?:\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{2}[\/\-]\d{2})\b',
-            "label": "DATE", "confidence": 0.72,
-            "level": "strict",
-            "reason": "Date (regex heuristic)",
-        },
-    ]
+    # Regex NER fallback patterns — loaded from ner_patterns.json (persistent,
+    # editable), not hardcoded.
+    _FALLBACK_PATTERNS = _NER_DATA["fallback_patterns"]
 
     def _scan_regex_fallback(self, content: str, file_path: str,
                               sensitivity: str) -> list:

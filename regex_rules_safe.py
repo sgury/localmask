@@ -35,19 +35,25 @@ _PATTERNS_FILE = _resolve_patterns_file()
 
 def _load_pattern_data():
     """Detection patterns live in regex_patterns.json so they can be edited or
-    added to WITHOUT changing code. Returns (universal, file_type_extra)."""
-    global _PATTERNS_FILE
+    added to WITHOUT changing code. Returns (universal, file_type_extra). Also
+    stashes the full document in _PATTERN_META so tuning vocabularies
+    (false_positive_values, public_url_domains) can be read from the same DB."""
+    global _PATTERNS_FILE, _PATTERN_META
     _PATTERNS_FILE = _resolve_patterns_file()
     try:
         with open(_PATTERNS_FILE, encoding="utf-8") as fh:
             data = json.load(fh)
+        _PATTERN_META = data
         return data.get("universal", {}), data.get("file_type_extra", {})
     except (OSError, json.JSONDecodeError) as exc:
         print(f"[regex_rules_safe] WARNING: could not load {_PATTERNS_FILE}: {exc}")
+        _PATTERN_META = {}
         return {}, {}
 
 
+_PATTERN_META: dict = {}
 _UNIVERSAL_DATA, _FILE_TYPE_EXTRA_DATA = _load_pattern_data()
+_UNIVERSAL_META = _PATTERN_META
 
 
 def _collect_direct_mask(universal: dict, file_type_extra: dict) -> set:
@@ -179,19 +185,14 @@ class RegexRulesSafe:
 
         return results
 
-    # Values that are almost never real secrets — structural/boilerplate
-    FALSE_POSITIVE_VALUES = {
-        "utf-8", "utf8", "utf-16", "true", "false", "yes", "no", "none",
-        "null", "nil", "undefined", "localhost", "127.0.0.1", "0.0.0.0",
-        "example.com", "test", "testing", "password", "changeme",
-        "change_me", "change-me", "changeit", "your_password_here",
-        "todo", "fixme", "placeholder", "default", "example", "sample",
-        "dummy", "secret", "redacted", "masked", "notset", "not_set",
-        "disabled", "enabled", "required", "optional", "unknown",
-        # log levels / common config values
-        "debug", "info", "warning", "warn", "error", "critical", "trace",
-        "development", "production", "staging",
-    }
+    # Values that are almost never real secrets — structural/boilerplate.
+    # Loaded from regex_patterns.json (editable/persistent); the literal below
+    # is only a safety fallback if the data file omits the key.
+    FALSE_POSITIVE_VALUES = set(_UNIVERSAL_META.get("false_positive_values") or {
+        "utf-8", "utf8", "true", "false", "none", "null", "localhost",
+        "127.0.0.1", "0.0.0.0", "example.com", "test", "changeme",
+        "placeholder", "default", "example", "dummy", "secret",
+    })
 
     # Generic key-value patterns prone to matching placeholders and config
     # noise — their values must survive the weak-value gate below.
@@ -217,14 +218,12 @@ class RegexRulesSafe:
     ]
 
     # Well-known public service hosts — a URL here carries no org-specific
-    # info unless its path contains a token-like segment.
-    PUBLIC_URL_DOMAINS = (
-        "google.com", "googleapis.com", "googleusercontent.com",
-        "github.com", "githubusercontent.com", "microsoft.com",
-        "microsoftonline.com", "apple.com", "salesforce.com",
-        "stackoverflow.com", "python.org", "npmjs.com", "docker.com",
-        "docker.io", "readthedocs.io", "wikipedia.org",
-    )
+    # info unless its path contains a token-like segment. Loaded from
+    # regex_patterns.json (editable/persistent), with a small fallback.
+    PUBLIC_URL_DOMAINS = tuple(_UNIVERSAL_META.get("public_url_domains") or (
+        "google.com", "googleapis.com", "github.com", "microsoft.com",
+        "apple.com", "python.org", "npmjs.com", "docker.io",
+    ))
 
     _URL_HOST_RE = re.compile(r"^https?://([^/\s:]+)")
     _TOKENISH_PATH_RE = re.compile(r"[A-Za-z0-9_\-]{20,}")
@@ -383,9 +382,15 @@ class RegexRulesSafe:
         """Re-read regex_patterns.json — pick up edits without restarting."""
         cls.UNIVERSAL, cls.FILE_TYPE_EXTRA = _load_pattern_data()
         cls.DIRECT_MASK = _collect_direct_mask(cls.UNIVERSAL, cls.FILE_TYPE_EXTRA)
+        if _PATTERN_META.get("false_positive_values"):
+            cls.FALSE_POSITIVE_VALUES = set(_PATTERN_META["false_positive_values"])
+        if _PATTERN_META.get("public_url_domains"):
+            cls.PUBLIC_URL_DOMAINS = tuple(_PATTERN_META["public_url_domains"])
         return {"universal": len(cls.UNIVERSAL),
                 "file_types": len(cls.FILE_TYPE_EXTRA),
-                "direct_mask": len(cls.DIRECT_MASK)}
+                "direct_mask": len(cls.DIRECT_MASK),
+                "fp_values": len(cls.FALSE_POSITIVE_VALUES),
+                "public_domains": len(cls.PUBLIC_URL_DOMAINS)}
 
     @classmethod
     def add_pattern(cls, name: str, pattern: str, reason: str,
