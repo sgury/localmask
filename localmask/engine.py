@@ -501,6 +501,19 @@ def _scan_entropy_strings(content: str, file_ext: str,
                 continue  # Looks like natural language (3+ words)
             if value.count("/") > 3 and "://" not in value:
                 continue  # Looks like a file path
+            # ── Non-secret identifiers (verified 0 overlap with real secrets):
+            #   AWS ARNs, internal hostnames, and dependency coordinates are
+            #   infra/build metadata, not credentials. The entropy scanner is a
+            #   last-resort net, so err toward precision here.
+            if value.startswith(("arn:", "ldap://", "ldaps://")) \
+                    and "@" not in value:
+                continue  # ARN resource id / hostless LDAP URL
+            if re.search(r"\.(?:internal|local|corp|svc|cluster)(?::\d+)?$",
+                         value) and "@" not in value:
+                continue  # internal hostname[:port], no embedded credentials
+            if re.fullmatch(r"[a-z][\w.\-]*(?::[\w.\-]+){2}", value) \
+                    and "://" not in value and "@" not in value:
+                continue  # gradle/maven coordinate group:artifact:version
             # Skip f-string templates that reference variables, not literals
             if "{" in value and "}" in value:
                 continue  # e.g. f"Bearer {API_KEY}" — the secret is the var, not the string
