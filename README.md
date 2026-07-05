@@ -11,9 +11,19 @@ The free edition is open source and runs entirely offline: a 27+ pattern regex
 engine, entropy detection, masking + rehydrate, a publishable masked repo, git
 sync, and a CLI + MCP server. No AI model, no cloud, no account.
 
+### New in this version
+- **Persistent local vault** — tokens now stay stable across scans, syncs, and
+  process restarts (and rehydration works in a fresh process). The mapping is
+  stored in an encrypted local SQLite file (`~/.localmask/vault.sqlite`, 0600),
+  keyed by repo so re-scanning reuses the same tokens.
+- **Editable detection rules (data-driven)** — patterns live in
+  `regex_patterns.json`, not hard-coded. Add or tweak rules with no code:
+  edit the file, or call `RegexRulesSafe.add_pattern(...)` / `save_patterns()`.
+
 > Want an AI model that catches what patterns miss and learns from your
-> corrections, a web dashboard, and the [AI proxy](#pro) that scrubs secrets out
-> of your live AI traffic? See [LocalMask Pro](https://localmaskpro.com).
+> corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) that
+> scrubs secrets out of your live AI traffic, and a **team-shared vault** so
+> everyone gets consistent tokens? See [LocalMask Pro](https://localmaskpro.com).
 
 ---
 
@@ -107,17 +117,20 @@ Everything is local. There is no telemetry and no network call in the free editi
 
 ## What's in Free vs Pro
 
-| | Free (this repo) | Pro |
-|---|---|---|
-| Regex + entropy engine, 27+ types | ✓ | ✓ |
-| Mask / rehydrate | ✓ | ✓ |
-| Edit detections (ignore / teach) | ✓ | ✓ |
-| Publish masked repo + git sync | ✓ | ✓ |
-| CLI + MCP server | ✓ | ✓ |
-| Local AI model that learns | — | ✓ |
-| Web dashboard | — | ✓ |
-| AI proxy (prompt firewall for your AI traffic) | — | ✓ |
-| Team / org shared rules | — | ✓ (Enterprise) |
+| | Free (this repo) | Pro | Team / Enterprise |
+|---|---|---|---|
+| Regex + entropy engine, 27+ types | ✓ | ✓ | ✓ |
+| Editable pattern rules (`regex_patterns.json`) | ✓ | ✓ | ✓ |
+| Mask / rehydrate | ✓ | ✓ | ✓ |
+| Persistent local vault (stable tokens, encrypted) | ✓ | ✓ | ✓ |
+| Edit detections (ignore / teach) | ✓ | ✓ | ✓ |
+| Publish masked repo + git sync | ✓ | ✓ | ✓ |
+| CLI + MCP server | ✓ | ✓ | ✓ |
+| Local AI model that learns | — | ✓ | ✓ |
+| Web dashboard | — | ✓ | ✓ |
+| AI proxy (prompt firewall for your AI traffic) | — | ✓ | ✓ |
+| Team-shared vault (consistent tokens across machines) | — | — | ✓ |
+| Org shared rules · LDAP/AD · SSO | — | — | ✓ |
 
 ## License
 
