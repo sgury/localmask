@@ -49,6 +49,23 @@ def _load_pattern_data():
 
 _UNIVERSAL_DATA, _FILE_TYPE_EXTRA_DATA = _load_pattern_data()
 
+
+def _collect_direct_mask(universal: dict, file_type_extra: dict) -> set:
+    """Subtypes whose value must be masked DIRECTLY (not via the key-position
+    guard), read from the pattern DB (`"mask_mode": "direct"`). Used for dotted
+    vendor tokens like hvs.<...> / SG.<...>.<...> that the guard mis-reads as
+    identifiers and would leave unmasked. Data-driven — no hardcoded names."""
+    names = set()
+    for name, body in (universal or {}).items():
+        if isinstance(body, dict) and body.get("mask_mode") == "direct":
+            names.add(name)
+    for _ft, pats in (file_type_extra or {}).items():
+        for name, body in (pats or {}).items():
+            if isinstance(body, dict) and body.get("mask_mode") == "direct":
+                names.add(name)
+    return names
+
+
 class RegexRulesSafe:
     """Detection patterns with per-pattern sensitivity levels.
     Call scan_file(path, content, sensitivity="standard") to control depth."""
@@ -56,6 +73,9 @@ class RegexRulesSafe:
     UNIVERSAL = _UNIVERSAL_DATA
 
     FILE_TYPE_EXTRA = _FILE_TYPE_EXTRA_DATA
+
+    # Subtypes flagged mask_mode=direct in regex_patterns.json (see above).
+    DIRECT_MASK = _collect_direct_mask(_UNIVERSAL_DATA, _FILE_TYPE_EXTRA_DATA)
 
     NOTEBOOK_EXTS = {"ipynb"}
     BASENAME_MAP = {
@@ -362,8 +382,10 @@ class RegexRulesSafe:
     def reload_patterns(cls):
         """Re-read regex_patterns.json — pick up edits without restarting."""
         cls.UNIVERSAL, cls.FILE_TYPE_EXTRA = _load_pattern_data()
+        cls.DIRECT_MASK = _collect_direct_mask(cls.UNIVERSAL, cls.FILE_TYPE_EXTRA)
         return {"universal": len(cls.UNIVERSAL),
-                "file_types": len(cls.FILE_TYPE_EXTRA)}
+                "file_types": len(cls.FILE_TYPE_EXTRA),
+                "direct_mask": len(cls.DIRECT_MASK)}
 
     @classmethod
     def add_pattern(cls, name: str, pattern: str, reason: str,

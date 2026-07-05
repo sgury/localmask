@@ -1,5 +1,5 @@
 {
-  "_comment": "LocalMask detection patterns — editable without touching code. Loaded at runtime by regex_rules_safe.py. Each entry: {pattern, confidence, level, reason}.",
+  "_comment": "LocalMask detection patterns \u2014 editable without touching code. Loaded at runtime by regex_rules_safe.py. Each entry: {pattern, confidence, level, reason}.",
   "universal": {
     "aws_access_key": {
       "pattern": "AKIA[0-9A-Z]{16}",
@@ -89,7 +89,8 @@
       "pattern": "SG\\.[a-zA-Z0-9_\\-]{10,}\\.[a-zA-Z0-9_\\-]{10,}",
       "confidence": 0.99,
       "level": "minimal",
-      "reason": "SendGrid API key"
+      "reason": "SendGrid API key",
+      "mask_mode": "direct"
     },
     "stripe_webhook_secret": {
       "pattern": "whsec_[a-zA-Z0-9]{20,}",
@@ -101,7 +102,8 @@
       "pattern": "hvs\\.[a-zA-Z0-9_\\-]{20,}",
       "confidence": 0.99,
       "level": "minimal",
-      "reason": "HashiCorp Vault token"
+      "reason": "HashiCorp Vault token",
+      "mask_mode": "direct"
     },
     "grafana_service_token": {
       "pattern": "glsa_[a-zA-Z0-9_\\-]{20,}",
@@ -498,6 +500,54 @@
       "confidence": 0.82,
       "level": "strict",
       "reason": "Terraform resource name label"
+    },
+    "bitcoin_address": {
+      "pattern": "\\b(?:bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})\\b",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "Bitcoin address"
+    },
+    "ethereum_address": {
+      "pattern": "\\b0x[a-fA-F0-9]{40}\\b",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "Ethereum address"
+    },
+    "iban": {
+      "pattern": "\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b",
+      "confidence": 0.85,
+      "level": "strict",
+      "reason": "IBAN bank account"
+    },
+    "ipv6_address": {
+      "pattern": "\\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\\b|\\b(?:[0-9A-Fa-f]{1,4}:){1,7}:\\b",
+      "confidence": 0.8,
+      "level": "standard",
+      "reason": "IPv6 address"
+    },
+    "mac_address": {
+      "pattern": "\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b",
+      "confidence": 0.8,
+      "level": "standard",
+      "reason": "MAC address"
+    },
+    "litecoin_address": {
+      "pattern": "\\b(?:ltc1[ac-hj-np-z02-9]{11,71}|[LM][a-km-zA-HJ-NP-Z1-9]{26,33})\\b",
+      "confidence": 0.8,
+      "level": "strict",
+      "reason": "Litecoin address"
+    },
+    "vehicle_vin": {
+      "pattern": "\\b[A-HJ-NPR-Z0-9]{17}\\b",
+      "confidence": 0.65,
+      "level": "strict",
+      "reason": "Vehicle VIN"
+    },
+    "swift_bic": {
+      "pattern": "\\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\\b",
+      "confidence": 0.65,
+      "level": "strict",
+      "reason": "SWIFT/BIC bank code"
     }
   },
   "file_type_extra": {
@@ -506,25 +556,25 @@
         "pattern": "\\{\\{\\s*ref\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)\\s*\\}\\}",
         "confidence": 0.97,
         "level": "strict",
-        "reason": "dbt {{ ref() }} — internal model name"
+        "reason": "dbt {{ ref() }} \u2014 internal model name"
       },
       "dbt_source_name": {
         "pattern": "\\{\\{\\s*source\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]",
         "confidence": 0.97,
         "level": "strict",
-        "reason": "dbt {{ source() }} — source name"
+        "reason": "dbt {{ source() }} \u2014 source name"
       },
       "dbt_source_table": {
         "pattern": "\\{\\{\\s*source\\s*\\([^,]+,\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)\\s*\\}\\}",
         "confidence": 0.97,
         "level": "strict",
-        "reason": "dbt {{ source() }} — table name"
+        "reason": "dbt {{ source() }} \u2014 table name"
       },
       "dbt_var": {
         "pattern": "\\{\\{\\s*var\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)\\s*\\}\\}",
         "confidence": 0.88,
         "level": "strict",
-        "reason": "dbt {{ var() }} — variable name"
+        "reason": "dbt {{ var() }} \u2014 variable name"
       },
       "sql_schema_table": {
         "pattern": "(?i)(?:from|join)\\s+([a-zA-Z][a-zA-Z0-9_]{1,63}\\.[a-zA-Z][a-zA-Z0-9_]{1,63})\\b",
@@ -1409,19 +1459,19 @@
         "reason": "Password mentioned in prose"
       },
       "prose_credential": {
-        "pattern": "(?i)\\b(?:credentials?|passphrase|secret)\\s*[:\\-–]\\s*[\"\\']?([^\\s\"\\',.]{6,})[\"\\']?",
+        "pattern": "(?i)\\b(?:credentials?|passphrase|secret)\\s*[:\\-\u2013]\\s*[\"\\']?([^\\s\"\\',.]{6,})[\"\\']?",
         "confidence": 0.87,
         "level": "minimal",
         "reason": "Credential value in prose"
       },
       "prose_api_key": {
-        "pattern": "(?i)\\bapi\\s+key\\s*[:\\-–is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{16,})[\"\\']?",
+        "pattern": "(?i)\\bapi\\s+key\\s*[:\\-\u2013is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{16,})[\"\\']?",
         "confidence": 0.88,
         "level": "minimal",
         "reason": "API key value in prose"
       },
       "prose_token": {
-        "pattern": "(?i)\\btoken\\s*[:\\-–is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{20,})[\"\\']?",
+        "pattern": "(?i)\\btoken\\s*[:\\-\u2013is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{20,})[\"\\']?",
         "confidence": 0.86,
         "level": "minimal",
         "reason": "Token value in prose"
@@ -1463,7 +1513,7 @@
         "reason": "AWS access key in prose"
       },
       "prose_generic_key": {
-        "pattern": "(?i)\\b(?:key|secret)\\s*[:\\-–=]\\s*[\"\\']?([a-zA-Z0-9\\-_/+]{20,})[\"\\']?",
+        "pattern": "(?i)\\b(?:key|secret)\\s*[:\\-\u2013=]\\s*[\"\\']?([a-zA-Z0-9\\-_/+]{20,})[\"\\']?",
         "confidence": 0.82,
         "level": "minimal",
         "reason": "Generic key/secret value in prose"

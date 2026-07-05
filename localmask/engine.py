@@ -49,6 +49,8 @@ def _is_text(path: str) -> bool:
     return False
 
 
+
+
 _WELL_KNOWN_IMAGES = {
     "postgres", "postgresql", "mysql", "mariadb", "redis", "mongodb", "mongo",
     "nginx", "apache", "httpd", "haproxy", "traefik",
@@ -465,6 +467,11 @@ def _scan_entropy_strings(content: str, file_ext: str,
             if value in already_found:
                 continue
 
+            # HTTP headers / localhost example connection strings are never
+            # secrets (shared filter with the regex layer).
+            if RegexRulesSafe._is_noise_value(value):
+                continue
+
             # ── Filter 1: Length ──────────────────────────────────────────
             if len(value) < 16 or len(value) > 500:
                 continue
@@ -720,7 +727,15 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         subtype = _semantic_subtype(det.get("type", "SECRET"), value,
                                     det.get("context", ""))
         token = _make_token(session, value, subtype)
-        masked = _context_aware_replace(masked, value, token)
+        # Patterns flagged mask_mode=direct in regex_patterns.json (dotted
+        # vendor tokens like hvs.<...> / SG.<...>.<...>) are wrongly protected
+        # by the key-position guard in _context_aware_replace, which silently
+        # drops them. Their shape proves they're the secret, so mask directly.
+        # Data-driven: the set comes from the pattern DB, not hardcoded names.
+        if det.get("type", "") in RegexRulesSafe.DIRECT_MASK:
+            masked = masked.replace(value, token)
+        else:
+            masked = _context_aware_replace(masked, value, token)
         base_engine = _engine_label(det.get("pattern_reason", ""))
         has_llm = bool(det.get("llm_decision"))
         if has_llm:
