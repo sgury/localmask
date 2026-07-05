@@ -124,7 +124,10 @@ class LocalMaskEngine:
 
         scan_record = {
             "scan_id": scan_id,
-            "repo_url": source,
+            # Store the resolved absolute path for local scans so sync/teach work
+            # from any working directory (a relative path would resolve against
+            # the wrong cwd later). URLs are kept verbatim.
+            "repo_url": source if is_url else os.path.realpath(src_dir),
             "org": org,
             "status": "draft",
             "created_at": now,

@@ -32,7 +32,20 @@ _KEY_FILE = os.path.join(_DIR, ".vault_key")
 
 
 def repo_id_for(src: str) -> str:
-    norm = (src or "").rstrip("/").lower().replace(".git", "")
+    """Stable id for a repo/source. Local paths are canonicalized to their real
+    absolute path so the SAME directory always maps to the SAME id regardless of
+    how it was referenced (relative vs absolute, trailing slash, or the current
+    working directory). Without this, a relative path and its resolved absolute
+    form hash differently, and the vault/lexicon key under mismatched ids."""
+    s = (src or "").strip()
+    is_url = s.startswith(
+        ("http://", "https://", "git@", "ssh://", "git://", "file://"))
+    if s and not is_url:
+        try:
+            s = os.path.realpath(os.path.expanduser(s))
+        except Exception:
+            pass
+    norm = s.rstrip("/").lower().replace(".git", "")
     return hashlib.sha256(norm.encode()).hexdigest()[:16]
 
 
