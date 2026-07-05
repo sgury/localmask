@@ -86,6 +86,64 @@ localmask hook <scan_id>        # install a git hook to auto-sync on commit
 
 Unchanged secrets keep the same placeholder across syncs; new secrets get new ones.
 
+## Git integrations — all the ways
+
+| Integration | Command | What it does |
+|---|---|---|
+| Scan a local folder | `localmask scan ./repo` | mask secrets on disk |
+| Scan a remote repo | `localmask scan https://github.com/org/repo.git` | clone → mask (never stored unmasked) |
+| Publish a masked mirror | `localmask publish <scan> <remote-url>` | push a masked copy to any git remote |
+| Keep it synced | `localmask sync <scan>` | re-scan on change, tokens stay stable |
+| Auto-sync on commit | `localmask hook <scan>` | installs a git `post-commit` / `pre-push` hook |
+| Drive it from your AI editor | MCP (below) | assistant calls scan/publish for you |
+
+The remote can be **GitHub, GitLab, Bitbucket, a self-hosted git server, or
+Google Secure Source Manager** — any `https://`, `ssh://`, `git@`, or `file://`
+remote.
+
+### Private repos (tokens)
+For a private source or a private masked mirror, give LocalMask a token:
+
+```bash
+localmask store-token ghp_your_token        # stored, returns a credential_id
+localmask scan https://github.com/org/private.git -c <credential_id>
+localmask publish <scan> https://github.com/org/masked.git -c <credential_id>
+```
+
+Or rely on the git credentials already on your machine (e.g. `gh auth`), or pass
+`--token` directly.
+
+## How the git integration stays secure
+
+- **Tokens never touch the URL, process arguments, or `.git/config`.** LocalMask
+  authenticates via `GIT_ASKPASS`, so your token isn't visible in `ps`, shell
+  history, or the cloned repo's config.
+- **Git URLs are validated against an allowlist** (`https/ssh/git@/file`), and a
+  `--` separator is placed before them — this blocks argument-injection tricks
+  like `--upload-pack=<cmd>` and the `ext::` transport that could run commands.
+- **The git username is passed via an environment variable, never interpolated
+  into a shell script** — so a hostile username can't inject commands.
+- **Only masked content is ever pushed.** The published mirror contains
+  `~[TOKEN]~` placeholders; the real values stay in your local vault.
+- **Tokens can be stored short-lived and encrypted** (`store-token`), or not
+  stored at all (`--token` per command).
+
+## Using AI with LocalMask (free)
+
+The free edition does **not** call any AI itself — there's no built-in Ask-AI and
+no proxy (those are Pro). Instead it makes your code *safe to hand to whatever AI
+you already use*:
+
+1. `localmask scan ./repo` → the masked files are safe. **Paste them into
+   Claude, ChatGPT, Cursor, etc. yourself** — the secrets are already tokens.
+2. Or `localmask publish …` a masked mirror and **point your AI tool / agent at
+   the mirror** instead of your real repo.
+
+You don't need any AI API keys in the free edition. (`set-key` and `localmask
+ask` exist in the CLI but require **Pro**, which adds a built-in "ask the AI
+about this repo" command and the AI proxy that scrubs your live prompts
+automatically — see [localmaskpro.com](https://localmaskpro.com).)
+
 ## Use it inside your AI editor (MCP)
 
 LocalMask ships an MCP server so assistants (Claude, etc.) can scan and mask on
