@@ -293,11 +293,12 @@ class HierarchicalReviewer:
     """Interactive 3-level detection reviewer: Type -> Instances -> Single."""
 
     def __init__(self, detections: list, repo_label: str = "",
-                 save_callback=None, repo_root: str = ""):
+                 save_callback=None, repo_root: str = "", mode: str = "SERVICE"):
         self.repo_label = repo_label
         self.repo_root = repo_root or os.getcwd()
         self.detections = detections
         self._save_callback = save_callback
+        self.mode = mode
 
         # Group by type
         self.types = {}
@@ -353,7 +354,7 @@ class HierarchicalReviewer:
             rejected = sum(1 for d in self.detections if d.decision is False)
 
             print(f"\n{BOLD}{'═' * 70}{RESET}")
-            print(f"{BOLD}  LocalMask Pro — Interactive Review{RESET}  {MAGENTA}[SERVICE]{RESET}")
+            print(f"{BOLD}  LocalMask Pro — Interactive Review{RESET}  {MAGENTA}[{self.mode}]{RESET}")
             print(f"{BOLD}{'═' * 70}{RESET}")
             print(f"  {DIM}Repo:{RESET}     {self.repo_label}")
             print(f"  {DIM}Total:{RESET}    {total} detections across {len(self.types)} types")
@@ -1246,6 +1247,30 @@ The AI only sees masked content — real secrets are replaced with tokens.
         _local_ask(args)
         return
 
+    # ── hosted-only commands: give a clear local-mode message (not a raw
+    #    "not connected" error) plus the free-edition alternative. ────────────
+    if args.command in ("store-token", "submit", "approve-all", "set-key") \
+            and not _is_connected():
+        _hint = {
+            "store-token": "In free, pass a git token per command with "
+                           "`--token <tok>`, or use your system git "
+                           "credentials (e.g. `gh auth login`).",
+            "set-key":     "In free, pass your AI key inline: "
+                           "`localmask ask <scan> \"...\" --provider openai "
+                           "--api-key sk-...`, or via env "
+                           "(OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY "
+                           "/ XAI_API_KEY / LOCALMASK_AI_KEY).",
+            "submit":      "The submit/approval workflow is a hosted "
+                           "(Pro/Team) feature. In free, review decisions "
+                           "locally with `localmask review <scan>`.",
+            "approve-all": "The approval workflow is a hosted (Pro/Team) "
+                           "feature. In free, review decisions locally with "
+                           "`localmask review <scan>`.",
+        }[args.command]
+        print(f"  {YELLOW}'{args.command}' needs the hosted service "
+              f"(Pro/Team).{RESET}\n  {_hint}")
+        return
+
     # ── connect ─────────────────────────────────────────────────────────────
     if args.command == "init":
         cmd_init(args)
@@ -1371,6 +1396,34 @@ The AI only sees masked content — real secrets are replaced with tokens.
     # ── review ──────────────────────────────────────────────────────────────
     elif args.command == "review":
         scan_id = args.scan_id
+        if not _is_connected():
+            eng = _local_engine()
+            data = eng.get_detections(scan_id)
+            repo_url = data.get("repo_url", scan_id)
+            dets = []
+            for d in data.get("detections", []):
+                det = Detection(
+                    det_id=d["det_id"], token=d["token"], det_type=d["type"],
+                    line=d.get("line", 0), confidence=d.get("confidence", 0.9),
+                    file=d.get("file", ""), context_lines=d.get("context_lines", []))
+                if d.get("decision") == "approved":
+                    det.decision = True
+                elif d.get("decision") == "rejected":
+                    det.decision = False
+                dets.append(det)
+            print(f"  {GREEN}✓ {len(dets)} detections loaded (local){RESET}\n")
+
+            def save_local(detections):
+                decisions = {det.id: ("approved" if det.decision else "rejected")
+                             for det in detections if det.decision is not None}
+                if decisions:
+                    eng.review_detections(scan_id, decisions)
+                    print(f"  {GREEN}✓ Saved {len(decisions)} decisions locally{RESET}")
+
+            HierarchicalReviewer(dets, repo_url, save_callback=save_local,
+                                 mode="LOCAL").run()
+            return
+
         client = _get_client()
         print(f"\n  {MAGENTA}[SERVICE]{RESET} Fetching detections for {scan_id}...", flush=True)
         data = client.get_detections(scan_id)
