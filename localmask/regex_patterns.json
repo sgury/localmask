@@ -502,7 +502,7 @@
       "reason": "Terraform resource name label"
     },
     "bitcoin_address": {
-      "pattern": "\\b(?:bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})\\b",
+      "pattern": "\\b(?:bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,45})\\b",
       "confidence": 0.9,
       "level": "standard",
       "reason": "Bitcoin address"
@@ -686,6 +686,18 @@
       "confidence": 0.8,
       "level": "strict",
       "reason": "twilio api key sid"
+    },
+    "ipv4_address": {
+      "pattern": "\\b(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\b",
+      "confidence": 0.7,
+      "level": "strict",
+      "reason": "IPv4 address"
+    },
+    "credit_card_grouped": {
+      "pattern": "\\b\\d{4}[ -]\\d{4}[ -]\\d{4}[ -]\\d{4}\\b",
+      "confidence": 0.85,
+      "level": "standard",
+      "reason": "credit card number"
     }
   },
   "file_type_extra": {
