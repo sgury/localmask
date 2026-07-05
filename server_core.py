@@ -149,7 +149,7 @@ class LocalMaskEngine:
     # ── Sync (re-scan on git update) ───────────────────────────────────────
 
     def sync_repo(self, scan_id: str, credential_id: str = "",
-                  token: str = "") -> dict:
+                  token: str = "", auto_republish: bool = True) -> dict:
         """Re-scan a previously scanned repo, preserve existing token mappings,
         detect new secrets, and optionally re-publish the masked repo.
 
@@ -259,13 +259,18 @@ class LocalMaskEngine:
         # pre-sync snapshot on disk.
         _persist_scan(scan_id)
 
-        # If scan was published, keep it approved so it can be re-published
-        if scan["status"] == "published":
+        # New/undecided detections un-approve the scan: it must be re-reviewed
+        # before the masked mirror is refreshed again.
+        if new_count > 0 and scan["status"] in ("approved", "published"):
+            scan["status"] = "draft"
+        elif scan["status"] == "published":
             scan["status"] = "approved"
 
-        # Auto re-publish if target is set and scan is approved
+        # Auto re-publish if target is set and scan is approved. Callers that
+        # enforce their own approval gate (the CLI) pass auto_republish=False.
         pub_result = None
-        if scan["status"] == "approved" and scan.get("publish_target"):
+        if auto_republish and scan["status"] == "approved" \
+                and scan.get("publish_target"):
             try:
                 pub_result = self.publish_scan(
                     scan_id, scan["publish_target"],

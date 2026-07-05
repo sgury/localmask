@@ -160,6 +160,41 @@ def _save_config(cfg: dict):
         json.dump(cfg, f, indent=2)
 
 
+def _publish_policy() -> str:
+    """'review' (default) → publishing/auto-republish needs an approved review.
+    'auto' → detections are auto-approved and the masked mirror publishes
+    without a manual gate."""
+    p = _load_config().get("publish_policy", "review")
+    return p if p in ("review", "auto") else "review"
+
+
+def _pending_count(scan: dict) -> int:
+    """Detections not yet decided (approved/rejected) — i.e. unreviewed."""
+    return sum(1 for d in scan.get("detections", [])
+               if d.get("decision") in (None, "pending"))
+
+
+def _approve_all_local(scan_id: str) -> dict:
+    """Approve every detection and mark the scan approved-for-publish. Returns
+    the scan. Used by `approve-all`, by `review` when nothing is left pending,
+    and by publish/sync under the 'auto' policy."""
+    from server_core import _get_or_load_scan, _persist_scan
+    scan = _get_or_load_scan(scan_id)
+    if not scan:
+        return {}
+    for d in scan.get("detections", []):
+        if d.get("decision") in (None, "pending"):
+            d["decision"] = "approved"
+    scan["status"] = "approved"
+    scan["reviewed_by"] = scan.get("reviewed_by") or "developer"
+    _persist_scan(scan_id)
+    return scan
+
+
+def _is_approved(scan: dict) -> bool:
+    return scan.get("status") == "approved" and _pending_count(scan) == 0
+
+
 def _get_client() -> ServiceClient:
     cfg = _load_config()
     url = cfg.get("service_url")
@@ -1200,6 +1235,14 @@ The AI only sees masked content — real secrets are replaced with tokens.
     approve_p.add_argument("scan_id", help="Scan ID")
 
     # set-key
+    # config — read/set local settings (e.g. the publish approval policy)
+    cfg_p = sub.add_parser("config",
+                           help="View or change settings (e.g. publish-policy)")
+    cfg_p.add_argument("key", nargs="?", default="",
+                       help="Setting name, e.g. publish-policy")
+    cfg_p.add_argument("value", nargs="?", default="",
+                       help="New value, e.g. review | auto")
+
     key_p = sub.add_parser("set-key",
                            help="Save an AI provider API key (free: encrypted locally; typed hidden)")
     key_p.add_argument("provider",
@@ -1231,6 +1274,8 @@ The AI only sees masked content — real secrets are replaced with tokens.
     pub_p.add_argument("--credential-id", "-c", default="",
                        help="Credential ID from store-token")
     pub_p.add_argument("--username", "-u", default="", help="Git username")
+    pub_p.add_argument("--force", "-f", action="store_true",
+                       help="Publish even if the review isn't approved (one-off)")
 
     # activate
     act_p = sub.add_parser("activate", help="Activate a LocalMask Pro license key")
@@ -1422,14 +1467,53 @@ The AI only sees masked content — real secrets are replaced with tokens.
                   f"key next time (typed hidden), and rotate this one.")
         return
 
-    if args.command in ("submit", "approve-all") and not _is_connected():
+    # config (local): view or set settings, e.g. the publish approval policy.
+    if args.command == "config":
+        key = (args.key or "").replace("-", "_")
+        if not key:
+            cfg = _load_config()
+            print(f"  {BOLD}Settings{RESET} {DIM}({CONFIG_FILE}){RESET}")
+            print(f"    publish-policy = {CYAN}{_publish_policy()}{RESET}  "
+                  f"{DIM}(review = approve before publishing · auto = "
+                  f"auto-approve + auto-publish){RESET}")
+            return
+        if key == "publish_policy":
+            val = (args.value or "").lower()
+            if val not in ("review", "auto"):
+                print(f"  {RED}✗ publish-policy must be 'review' or 'auto'.{RESET}")
+                return
+            cfg = _load_config(); cfg["publish_policy"] = val; _save_config(cfg)
+            print(f"  {GREEN}✓ publish-policy = {val}{RESET}")
+            if val == "auto":
+                print(f"  {DIM}Detections auto-approve; sync/hook auto-republish "
+                      f"the masked mirror on every change.{RESET}")
+            else:
+                print(f"  {DIM}Publishing now requires an approved review "
+                      f"(localmask review / approve-all).{RESET}")
+            return
+        print(f"  {RED}✗ Unknown setting '{args.key}'.{RESET} Known: publish-policy")
+        return
+
+    # approve-all (local): approve every detection and mark the scan approved,
+    # so it can be published under the 'review' policy.
+    if args.command == "approve-all" and not _is_connected():
+        from server_core import _get_or_load_scan
+        if not _get_or_load_scan(args.scan_id):
+            print(f"  {RED}✗ Scan not found: {args.scan_id}{RESET}")
+            return
+        scan = _approve_all_local(args.scan_id)
+        n = len(scan.get("detections", []))
+        print(f"  {GREEN}✓ Approved all {n} detections{RESET} — scan is "
+              f"{BOLD}approved{RESET} and ready to publish.")
+        print(f"  {DIM}Publish:{RESET} localmask publish {args.scan_id} <git-url>")
+        return
+
+    if args.command == "submit" and not _is_connected():
         _hint = {
             "submit":      "The submit/approval workflow is a hosted "
-                           "(Pro/Team) feature. In free, review decisions "
-                           "locally with `localmask review <scan>`.",
-            "approve-all": "The approval workflow is a hosted (Pro/Team) "
-                           "feature. In free, review decisions locally with "
-                           "`localmask review <scan>`.",
+                           "(Pro/Team) feature. In free, approve locally with "
+                           "`localmask review <scan>` or `localmask approve-all "
+                           "<scan>`.",
         }[args.command]
         print(f"  {YELLOW}'{args.command}' needs the hosted service "
               f"(Pro/Team).{RESET}\n  {_hint}")
@@ -1605,6 +1689,22 @@ The AI only sees masked content — real secrets are replaced with tokens.
                 if decisions:
                     eng.review_detections(scan_id, decisions)
                     print(f"  {GREEN}✓ Saved {len(decisions)} decisions locally{RESET}")
+                # If every detection has now been decided, mark the scan approved
+                # so it can be published under the 'review' policy.
+                from server_core import _get_or_load_scan, _persist_scan
+                sc = _get_or_load_scan(scan_id)
+                if sc:
+                    pend = _pending_count(sc)
+                    if pend == 0 and sc.get("detections"):
+                        sc["status"] = "approved"
+                        sc["reviewed_by"] = "developer"
+                        _persist_scan(scan_id)
+                        print(f"  {GREEN}✓ All reviewed — scan approved for "
+                              f"publish.{RESET}")
+                    elif pend:
+                        print(f"  {YELLOW}{pend} still pending{RESET} — approve "
+                              f"them (or `localmask approve-all {scan_id}`) "
+                              f"before publishing.")
 
             def teach_local(value, subtype):
                 # Persist to the repo lexicon, then re-scan in place so the
@@ -1619,7 +1719,8 @@ The AI only sees masked content — real secrets are replaced with tokens.
                     value, action="mask", subtype=subtype)
                 added = 0
                 if hits:
-                    added = eng.sync_repo(scan_id).get("new_detections", 0)
+                    added = eng.sync_repo(
+                        scan_id, auto_republish=False).get("new_detections", 0)
                 _, fresh = _load_dets()
                 return fresh, hits, added
 
@@ -1778,8 +1879,31 @@ The AI only sees masked content — real secrets are replaced with tokens.
             from server_core import SESSIONS, _get_or_load_scan
             _sc = _get_or_load_scan(args.scan_id)
             if _sc and _sc.get("session_key") not in SESSIONS:
-                eng.sync_repo(args.scan_id)
+                eng.sync_repo(args.scan_id, auto_republish=False)
                 _sc = _get_or_load_scan(args.scan_id)
+            # ── Approval gate ────────────────────────────────────────────────
+            # Under the default 'review' policy, the masked mirror only goes out
+            # after the detections have been reviewed & approved. 'auto' skips
+            # the gate (and auto-approves). --force overrides for a one-off.
+            policy = _publish_policy()
+            if _sc is not None and policy == "auto":
+                _approve_all_local(args.scan_id)
+                _sc = _get_or_load_scan(args.scan_id)
+            elif _sc is not None and not getattr(args, "force", False) \
+                    and not _is_approved(_sc):
+                pend = _pending_count(_sc)
+                print(f"  {YELLOW}⚠ Not published — this scan isn't approved "
+                      f"yet.{RESET}")
+                print(f"  {DIM}{pend} detection(s) still need review.{RESET} "
+                      f"Approve, then publish:")
+                print(f"    {CYAN}localmask review {args.scan_id}{RESET}        "
+                      f"{DIM}# review each, or…{RESET}")
+                print(f"    {CYAN}localmask approve-all {args.scan_id}{RESET}    "
+                      f"{DIM}# approve everything{RESET}")
+                print(f"  {DIM}Prefer no gate? {CYAN}localmask config "
+                      f"publish-policy auto{RESET}{DIM}, or one-off "
+                      f"{CYAN}--force{RESET}{DIM}.{RESET}")
+                return
             # Remember the target so `sync` re-publishes on future changes.
             # Persist it — the CLI is per-process, so this must survive to disk.
             if _sc is not None:
@@ -1872,7 +1996,7 @@ The AI only sees masked content — real secrets are replaced with tokens.
                 return
             # 2) Re-scan in place so the change is visible now (tokens stay stable).
             eng = _local_engine()
-            result = eng.sync_repo(scan_id)
+            result = eng.sync_repo(scan_id, auto_republish=False)
             total = result.get("total_detections", 0)
             added = result.get("new_detections", 0)
             occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
@@ -1908,20 +2032,31 @@ The AI only sees masked content — real secrets are replaced with tokens.
             if args.credential_id:
                 from localmask.vault_store import get_local_credential
                 _tok = get_local_credential(args.credential_id) or ""
-            result = eng.sync_repo(scan_id, token=_tok)
-            # Re-push the masked mirror if this scan has a publish target.
-            # (sync_repo's built-in auto-republish only fires for 'approved'
-            # scans; standalone free scans stay 'draft', so push explicitly.)
+            result = eng.sync_repo(scan_id, token=_tok, auto_republish=False)
+            # Re-push the masked mirror if this scan has a publish target — but
+            # respect the approval gate. New/undecided detections since the last
+            # approval hold the mirror until reviewed (unless policy is 'auto').
             from server_core import _get_or_load_scan
             _sc = _get_or_load_scan(scan_id)
             _target = _sc.get("publish_target", "") if _sc else ""
-            if _target and not result.get("re_published"):
+            policy = _publish_policy()
+            _new_cnt = result.get("new_detections", 0)
+            def _do_republish():
                 try:
-                    result["re_published"] = eng.publish_scan(
+                    return eng.publish_scan(
                         scan_id, _target,
                         credential_id=_sc.get("credential_id", ""))
                 except Exception as e:
-                    result["re_published"] = {"error": str(e)[:120]}
+                    return {"error": str(e)[:120]}
+            if _target and not result.get("re_published"):
+                if policy == "auto":
+                    _approve_all_local(scan_id)
+                    _sc = _get_or_load_scan(scan_id)
+                    result["re_published"] = _do_republish()
+                elif _is_approved(_sc) and _new_cnt == 0:
+                    result["re_published"] = _do_republish()
+                else:
+                    result["held_for_review"] = True
         else:
             client = _get_client()
             cred_id = args.credential_id or _load_config().get("credential_id", "")
@@ -1940,8 +2075,13 @@ The AI only sees masked content — real secrets are replaced with tokens.
             print(f"  {GREEN}✓ Sync complete{RESET}\n")
             print(f"  {BOLD}Scan ID:{RESET}     {CYAN}{scan_id}{RESET}")
             print(f"  {DIM}Total:{RESET}       {total} detections")
+            # Newly-detected secrets since the last scan — shown prominently.
             if new > 0:
-                print(f"  {YELLOW}New:{RESET}         {BOLD}{new} new detections found{RESET}")
+                print(f"  {BG_YELLOW}{BOLD} NEW {RESET} "
+                      f"{BOLD}{YELLOW}{new} new secret(s) detected since last "
+                      f"sync{RESET}")
+            else:
+                print(f"  {DIM}New:{RESET}         0 new detections")
             if removed > 0:
                 print(f"  {DIM}Removed:{RESET}     {removed} (no longer in code)")
             print(f"  {DIM}Carried:{RESET}     {carried} previous decisions preserved")
@@ -1953,9 +2093,20 @@ The AI only sees masked content — real secrets are replaced with tokens.
                 if pub.get("ok"):
                     print(f"\n  {GREEN}✓ Masked repo auto-republished to {pub.get('pushed_to', '?')}{RESET}")
                 else:
-                    print(f"\n  {YELLOW}⚠ Auto-republish failed{RESET}")
+                    print(f"\n  {YELLOW}⚠ Auto-republish failed:{RESET} "
+                          f"{pub.get('error', 'unknown')}")
+            elif result.get("held_for_review"):
+                print(f"\n  {YELLOW}⚠ Masked mirror NOT updated — "
+                      f"held for review.{RESET}")
+                print(f"  {DIM}{new} new + {pending} pending detection(s) must be "
+                      f"approved before the mirror is republished.{RESET}")
+                print(f"    {CYAN}localmask review {scan_id}{RESET}  or  "
+                      f"{CYAN}localmask approve-all {scan_id}{RESET}  then  "
+                      f"{CYAN}localmask publish {scan_id} <url>{RESET}")
+                print(f"  {DIM}(auto-publish on every change: "
+                      f"{CYAN}localmask config publish-policy auto{RESET}{DIM}){RESET}")
 
-            if new > 0:
+            if new > 0 and not result.get("held_for_review"):
                 print(f"\n  {DIM}Next: review new detections:{RESET}")
                 print(f"    localmask review {scan_id}")
             print()

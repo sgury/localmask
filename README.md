@@ -79,10 +79,33 @@ shared vault, taught values propagate to the whole team.
 ## Publish a masked copy
 
 ```bash
-localmask publish <scan_id> --target https://github.com/you/my-project-masked.git
+localmask publish <scan_id> https://github.com/you/my-project-masked.git
 ```
 
 Only masked content is pushed. Real values never leave your machine.
+
+### Approval gate (review before publishing)
+
+By default LocalMask **won't publish until the scan is reviewed & approved** — so
+a masked mirror never goes out (and `sync`/`hook` never auto-republish) with
+unreviewed detections. Approve either way:
+
+```bash
+localmask review <scan_id>        # decide each detection; approves when none are left pending
+localmask approve-all <scan_id>   # approve everything in one step
+localmask publish <scan_id> <url> # now allowed
+```
+
+New secrets found on a later `sync` **un-approve** the scan and hold the mirror
+until you review them again. Prefer no gate (auto-approve + auto-publish on every
+change)? Switch the policy:
+
+```bash
+localmask config                        # show current settings
+localmask config publish-policy auto    # auto-approve + auto-republish
+localmask config publish-policy review  # back to manual gate (default)
+localmask publish <scan> <url> --force  # one-off override of the gate
+```
 
 ## Let your AI read the masked code (two ways)
 
