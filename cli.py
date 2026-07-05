@@ -182,6 +182,75 @@ def _local_engine():
     return LocalMaskEngine()
 
 
+def _print_grant_guide(target_url: str, scan_id: str):
+    """Simple next-steps: two ways to let the AI read the masked code. LocalMask
+    never hands the AI any credentials."""
+    print(f"\n  {BOLD}Two ways to let your AI read the masked code:{RESET}")
+    print(f"  {DIM}(It only ever sees ~[TOKEN]~ placeholders — no real secrets.){RESET}\n")
+    print(f"  {BOLD}A) Grant permission to the private masked repo{RESET}")
+    print(f"     Keep {CYAN}{target_url}{RESET} private and give the AI its own read")
+    print(f"     access — read-only collaborator, deploy key, or GitHub/GitLab App.")
+    print(f"     The AI signs in as itself; LocalMask never shares your git token.\n")
+    print(f"  {BOLD}B) Read straight from LocalMask (from memory, nothing published){RESET}")
+    print(f"     In your AI editor's MCP config, the assistant calls LocalMask's")
+    print(f"     {CYAN}get_file_masked{RESET} / {CYAN}get_detections{RESET} tools — no git repo, no keys.")
+    print(f"\n  {DIM}Keep it current:{RESET} localmask sync {scan_id}\n")
+
+
+_ASK_DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-4-5", "openai": "gpt-4o", "gemini": "gemini-1.5-pro",
+    "grok": "grok-2-latest", "xai": "grok-2-latest", "groq": "llama-3.3-70b-versatile",
+    "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "meta": "meta-llama/Llama-3.3-70B-Instruct-Turbo", "openrouter": "openai/gpt-4o",
+}
+_ASK_KEY_ENVS = {
+    "anthropic": ["ANTHROPIC_API_KEY"], "openai": ["OPENAI_API_KEY"],
+    "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "grok": ["XAI_API_KEY"],
+    "xai": ["XAI_API_KEY"], "groq": ["GROQ_API_KEY"], "together": ["TOGETHER_API_KEY"],
+    "openrouter": ["OPENROUTER_API_KEY"],
+}
+
+
+def _local_ask(args):
+    """Bring-your-own-key AI Q&A in the free edition. Masking + rehydration are
+    100% local; only masked tokens go to the provider you choose with your key."""
+    from localmask.state import _new_session, _get_or_load_scan
+    from localmask import ask_local
+    scan = _get_or_load_scan(args.scan_id)
+    if not scan:
+        print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
+
+    provider = args.provider.lower()
+    # resolve key: --api-key > provider-specific env > generic env
+    key = args.api_key
+    for env in _ASK_KEY_ENVS.get(provider, []) + ["LOCALMASK_AI_KEY"]:
+        if not key:
+            key = os.environ.get(env, "")
+    if provider != "dry" and not key:
+        print(f"{RED}No API key for {provider}.{RESET} Pass --api-key or set "
+              f"{' / '.join(_ASK_KEY_ENVS.get(provider, ['LOCALMASK_AI_KEY']))}.")
+        sys.exit(1)
+    model = args.model or _ASK_DEFAULT_MODELS.get(provider, "gpt-4o")
+    question = args.question or "Review this repository and flag the top security risks."
+
+    # rebuild the masked session from source (need masked file contents)
+    print(f"  {CYAN}[LOCAL]{RESET} masking repo, asking {provider} ({model}) "
+          f"with your key — only masked tokens leave...", flush=True)
+    session = _new_session(scan["repo_url"], temp=False)
+    from localmask.engine import _scan_dir
+    src = scan["repo_url"]
+    src = src if os.path.isabs(src) else os.path.join(os.getcwd(), src)
+    _scan_dir(session, src)
+    if provider == "dry":
+        print(f"  {DIM}[dry-run] would ask: {question}{RESET}"); return
+    try:
+        answer = ask_local.ask(session, question, provider, key, model,
+                               base_url=args.base_url)
+    except Exception as e:
+        print(f"{RED}Ask failed: {e}{RESET}"); sys.exit(1)
+    print(f"\n{answer}\n")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # DETECTION MODEL (remote only — values never leave server)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1049,20 +1118,41 @@ The AI only sees masked content — real secrets are replaced with tokens.
                         help="Hook type (default: post-commit)")
 
     # ask
-    ask_p = sub.add_parser("ask", help="Ask AI about a specific scan (masked content only)")
+    ask_p = sub.add_parser("ask", help="Ask any AI about a scan (masked content only, your key)")
     ask_p.add_argument("scan_id", help="Scan ID to ask about")
     ask_p.add_argument("question", nargs="?", default="",
                        help="Question (omit for interactive mode)")
     ask_p.add_argument("--provider", "-p", default="anthropic",
-                       choices=["anthropic", "openai", "gemini", "dry"],
-                       help="AI provider (default: anthropic)")
-    ask_p.add_argument("--model", "-m", default="claude-sonnet-4-5",
-                       help="Model name")
+                       help="anthropic | openai | gemini | grok | groq | together | meta | openrouter | dry")
+    ask_p.add_argument("--api-key", "-k", default="",
+                       help="Your provider API key (or env: LOCALMASK_AI_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / XAI_API_KEY)")
+    ask_p.add_argument("--base-url", default="",
+                       help="Custom OpenAI-compatible endpoint (self-host, OpenRouter, etc.)")
+    ask_p.add_argument("--model", "-m", default="",
+                       help="Model name (defaults per provider)")
     ask_p.add_argument("--source", "-s", default="memory",
                        choices=["memory", "git"],
                        help="Read from platform memory (default) or published masked git repo")
     ask_p.add_argument("--git-url", default="",
                        help="Git URL of published masked repo (for --source git)")
+
+    # Local, no-key: turn an AI's tokenized answer back into real values.
+    rehy_p = sub.add_parser("rehydrate",
+                            help="Rehydrate ~[TOKEN]~ back to real values (local, no AI key)")
+    rehy_p.add_argument("scan_id", help="Scan ID whose vault to use")
+    rehy_p.add_argument("file", nargs="?", default="",
+                        help="File to rehydrate (default: read stdin)")
+
+    maskt_p = sub.add_parser("mask-text",
+                             help="Mask secrets in arbitrary text using a scan's vault (local)")
+    maskt_p.add_argument("scan_id", help="Scan ID whose vault to use")
+    maskt_p.add_argument("file", nargs="?", default="",
+                         help="File to mask (default: read stdin)")
+
+    exp_p = sub.add_parser("export",
+                           help="Write the masked repo to a local folder the AI can read (no keys/permissions)")
+    exp_p.add_argument("scan_id", help="Scan ID to export")
+    exp_p.add_argument("output_dir", help="Folder to write masked files into")
 
     proxy_p = sub.add_parser("proxy",
                              help="Run the local AI proxy (prompt firewall, Pro)")
@@ -1089,6 +1179,62 @@ The AI only sees masked content — real secrets are replaced with tokens.
                   "edition.\nUpgrade at https://localmaskpro.com")
             sys.exit(1)
         proxy_main()
+        return
+
+    # ── rehydrate (local, no key) ────────────────────────────────────────────
+    if args.command == "rehydrate":
+        from localmask.state import _new_session, _get_or_load_scan
+        from localmask.masking import _rehydrate
+        scan = _get_or_load_scan(args.scan_id)
+        if not scan:
+            print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
+        session = _new_session(scan["repo_url"], temp=False)  # hydrates vault
+        text = open(args.file).read() if args.file else sys.stdin.read()
+        sys.stdout.write(_rehydrate(session, text))
+        return
+
+    # ── mask-text (local) ────────────────────────────────────────────────────
+    if args.command == "mask-text":
+        from localmask.state import _new_session, _get_or_load_scan
+        from localmask.engine import _scan_file
+        scan = _get_or_load_scan(args.scan_id)
+        if not scan:
+            print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
+        session = _new_session(scan["repo_url"], temp=False)
+        text = open(args.file).read() if args.file else sys.stdin.read()
+        sys.stdout.write(_scan_file(session, text, "input.txt")["masked"])
+        return
+
+    # ── export masked repo to a local folder (AI reads it, no keys) ──────────
+    if args.command == "export":
+        from localmask.state import _new_session, _get_or_load_scan
+        from localmask.engine import _scan_dir
+        from localmask.gitops import _should_publish
+        scan = _get_or_load_scan(args.scan_id)
+        if not scan:
+            print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
+        session = _new_session(scan["repo_url"], temp=False)
+        src = scan["repo_url"]
+        src = src if os.path.isabs(src) else os.path.join(os.getcwd(), src)
+        _scan_dir(session, src)
+        out = os.path.expanduser(args.output_dir)
+        written = 0
+        for rel, d in session["files"].items():
+            if not _should_publish(rel):
+                continue
+            path = os.path.join(out, rel)
+            os.makedirs(os.path.dirname(path) or out, exist_ok=True)
+            with open(path, "w") as f:
+                f.write(d["masked"])
+            written += 1
+        print(f"  {GREEN}✓ Exported {written} masked files to {out}{RESET}")
+        print(f"  {DIM}Point your AI tool / agent at this folder — it reads the "
+              f"masked code with no keys, no repo permissions, no secrets.{RESET}")
+        return
+
+    # ── ask (local, bring-your-own-key, any provider) ────────────────────────
+    if args.command == "ask" and not _is_connected():
+        _local_ask(args)
         return
 
     # ── connect ─────────────────────────────────────────────────────────────
@@ -1384,9 +1530,7 @@ The AI only sees masked content — real secrets are replaced with tokens.
             print(f"  {GREEN}✓ Published masked repo{RESET}")
             print(f"  {DIM}Pushed to:{RESET}  {result.get('pushed_to', args.target_url)}")
             print(f"  {DIM}Files:{RESET}      {result.get('files', '?')}")
-            print(f"\n  {DIM}Point your AI tool at this masked repo — it never "
-                  f"sees the real secrets.{RESET}")
-            print(f"  {DIM}Keep it current:{RESET} localmask sync {args.scan_id}\n")
+            _print_grant_guide(args.target_url, args.scan_id)
             return
 
         client = _get_client()
@@ -1419,9 +1563,7 @@ The AI only sees masked content — real secrets are replaced with tokens.
         print(f"  {GREEN}✓ Published!{RESET}")
         print(f"  {DIM}Pushed to:{RESET}  {result.get('pushed_to', args.target_url)}")
         print(f"  {DIM}Files:{RESET}      {result.get('files', '?')}")
-        print(f"\n  {DIM}The masked repo is now available at the target URL.{RESET}")
-        print(f"  {DIM}You can ask AI about it:{RESET}")
-        print(f"    localmask ask {args.scan_id} --source git --git-url {args.target_url}\n")
+        _print_grant_guide(args.target_url, args.scan_id)
 
     # ── sync ────────────────────────────────────────────────────────────
     elif args.command == "sync":

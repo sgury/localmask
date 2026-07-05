@@ -77,6 +77,26 @@ localmask publish <scan_id> --target https://github.com/you/my-project-masked.gi
 
 Only masked content is pushed. Real values never leave your machine.
 
+## Let your AI read the masked code (two ways)
+
+The masked copy has only `~[TOKEN]~` placeholders — no real secrets — so the AI
+can read it safely. **LocalMask never hands the AI any git credentials.** Pick
+whichever fits:
+
+**A) Grant permission to the private masked repo.** Keep the masked repo private
+and give the AI *its own* read access — a read-only collaborator, a read-only
+deploy key, or a GitHub/GitLab App. The AI authenticates as itself; you control
+the grant. (Because it's masked, you *could* also just make the mirror public and
+skip auth entirely — no secrets are in it.)
+
+**B) Read straight from LocalMask, from memory — nothing published.** In your AI
+editor's MCP config, the assistant reads the masked files directly from LocalMask
+via the `get_file_masked` and `get_detections` tools. No git repo, no push, no
+keys. (See the MCP setup below.)
+
+Either way the AI only ever sees tokens, and it gets in with its own identity —
+LocalMask stays out of the AI's authentication.
+
 ## Keep the masked copy in sync
 
 ```bash
@@ -130,19 +150,41 @@ Or rely on the git credentials already on your machine (e.g. `gh auth`), or pass
 
 ## Using AI with LocalMask (free)
 
-The free edition does **not** call any AI itself — there's no built-in Ask-AI and
-no proxy (those are Pro). Instead it makes your code *safe to hand to whatever AI
-you already use*:
+Masking and **rehydration are 100% local and deterministic** — they're just a
+vault lookup, so they need **no AI and no API key** and are always exact. That
+means the free edition works with *any* AI.
 
-1. `localmask scan ./repo` → the masked files are safe. **Paste them into
-   Claude, ChatGPT, Cursor, etc. yourself** — the secrets are already tokens.
-2. Or `localmask publish …` a masked mirror and **point your AI tool / agent at
-   the mirror** instead of your real repo.
+### Ask any AI with your own key
+```bash
+localmask ask <scan_id> "What are the top risks?" --provider openai   --api-key sk-...
+localmask ask <scan_id> "..." --provider anthropic --api-key sk-ant-...
+localmask ask <scan_id> "..." --provider gemini    --api-key ...
+localmask ask <scan_id> "..." --provider grok      --api-key xai-...
+localmask ask <scan_id> "..." --provider groq      --api-key ...    # Meta/Llama
+localmask ask <scan_id> "..." --provider openrouter --base-url https://... --api-key ...
+```
+LocalMask masks the repo + your question locally, sends only `~[TOKEN]~`
+placeholders to the provider **you** chose with **your** key, then rehydrates the
+answer locally. Keys can also come from env (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+`GEMINI_API_KEY`, `XAI_API_KEY`, or `LOCALMASK_AI_KEY`). Works with OpenAI,
+Anthropic, Google Gemini, xAI/Grok, Meta/Llama (via Groq/Together), OpenRouter,
+and any OpenAI-compatible endpoint.
 
-You don't need any AI API keys in the free edition. (`set-key` and `localmask
-ask` exist in the CLI but require **Pro**, which adds a built-in "ask the AI
-about this repo" command and the AI proxy that scrubs your live prompts
-automatically — see [localmaskpro.com](https://localmaskpro.com).)
+### Or do it by hand — LocalMask never has to call anything
+```bash
+localmask export <scan_id> ./masked          # write the masked repo to a folder…
+#   → point your AI tool / agent at ./masked. No keys, no repo permissions, no secrets.
+echo "the AI's answer with ~[TOKEN]~s" | localmask rehydrate <scan_id>   # local, exact
+cat prompt.txt | localmask mask-text <scan_id>                          # mask before pasting
+```
+
+> The published/exported masked copy contains **no real secrets** — only tokens —
+> so it's safe to make the masked mirror **public**, and any AI can read it with
+> no credentials. Real values only ever exist in your local vault.
+
+Pro adds the convenience layer: a built-in interactive Ask-AI, the automatic AI
+**proxy** (scrub live prompts with zero manual steps), and a local model so you
+need no external AI at all — see [localmaskpro.com](https://localmaskpro.com).
 
 ## Use it inside your AI editor (MCP)
 
