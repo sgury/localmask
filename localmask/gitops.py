@@ -261,6 +261,54 @@ def create_remote_repo(url: str, token: str = "", private: bool = True):
                    "or `gh auth login`, or create the repo manually.")
 
 
+def add_readonly_deploy_key(url: str, key_path: str,
+                            title: str = "localmask-ai-readonly") -> dict:
+    """Generate a read-only SSH deploy key (if absent) and register its public
+    half on the masked repo via the `gh` CLI. Returns a dict with ok/message and,
+    on success, the private-key path + an SSH clone command for the AI. The key
+    grants read-only access to ONLY this repo — nothing else, no write."""
+    tgt = parse_git_target(url)
+    if not tgt:
+        return {"ok": False, "message": f"unrecognized git URL: {url}"}
+    host, owner, repo = tgt
+    if host != "github.com":
+        return {"ok": False,
+                "message": f"deploy keys are automated for GitHub; on {host} add "
+                           f"a read-only deploy key to {owner}/{repo} manually."}
+    if not _gh_cli_available():
+        return {"ok": False,
+                "message": "the `gh` CLI is required — install it and run "
+                           "`gh auth login`, then retry."}
+    pub_path = key_path + ".pub"
+    if not os.path.exists(key_path):
+        os.makedirs(os.path.dirname(key_path) or ".", exist_ok=True)
+        r = subprocess.run(
+            ["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-q",
+             "-C", f"localmask-ai-readonly:{owner}/{repo}"],
+            capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return {"ok": False, "message": f"ssh-keygen failed: {r.stderr[:200]}"}
+        try:
+            os.chmod(key_path, 0o600)
+        except OSError:
+            pass
+    # Register the public key as a read-only deploy key (no --allow-write).
+    r = subprocess.run(
+        ["gh", "repo", "deploy-key", "add", pub_path,
+         "--repo", f"{owner}/{repo}", "--title", title],
+        capture_output=True, text=True, timeout=60)
+    already = "already" in (r.stderr + r.stdout).lower()
+    if r.returncode != 0 and not already:
+        return {"ok": False,
+                "message": f"gh deploy-key add failed: {r.stderr.strip()[:200]}"}
+    ssh_url = f"git@github.com:{owner}/{repo}.git"
+    clone_cmd = (f'GIT_SSH_COMMAND="ssh -i {key_path} -o IdentitiesOnly=yes" '
+                 f'git clone {ssh_url}')
+    return {"ok": True, "already": already, "owner": owner, "repo": repo,
+            "key_path": key_path, "ssh_url": ssh_url, "clone_cmd": clone_cmd,
+            "message": "deploy key already present" if already else "deploy key added"}
+
+
 def _git_tracked_files(src_dir: str) -> list[str] | None:
     """Return list of git-tracked relative paths, or None if not a git repo."""
     try:

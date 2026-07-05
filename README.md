@@ -114,13 +114,26 @@ can read it safely. **LocalMask never hands the AI any git credentials.** Pick
 whichever fits:
 
 **A) The AI reads the published masked git mirror.** Keep the masked repo private
-and give the AI *its own* read access — a read-only collaborator, a read-only
-deploy key, or a GitHub/GitLab App. The AI **clones/pulls that repo** (a copy on
-its side, separate from your real code) and authenticates as itself; LocalMask
-never shares your git token. **To get the updated version after you change code:**
-`localmask sync <scan>` re-masks and re-pushes the mirror (once approved), and the
-AI runs `git pull`. (Because it's masked you *could* also make the mirror public
-and skip auth — no secrets are in it.)
+and give the AI *its own* read access — LocalMask never shares your git token.
+The AI **clones/pulls that repo** (a copy on its side, separate from your real
+code) and authenticates as itself. **To get the updated version after you change
+code:** `localmask sync <scan>` re-masks and re-pushes the mirror (once approved),
+and the AI runs `git pull`. (Because it's masked you *could* also make the mirror
+public and skip auth — no secrets are in it.)
+
+*Grant that access in one step:*
+
+```bash
+localmask grant-ai <scan_id>
+```
+
+This creates a **read-only, per-repo SSH deploy key** and registers it on the
+masked mirror via the `gh` CLI, then prints the AI's private key path and the
+exact clone command to hand it. The key is read-only and scoped to *only* that
+repo — it can't touch your real code or anything else, and it isn't your git
+token. (If the AI runs on your machine — Claude Code, Cursor — it can just use
+the git you already have; `grant-ai` is for a remote/separate AI identity. To
+revoke: `gh repo deploy-key delete`.)
 
 **B) The AI reads live from LocalMask — nothing published.** In your AI editor's
 MCP config, the assistant calls the `get_detections` and `get_file_masked` tools.

@@ -1275,6 +1275,16 @@ The AI only sees masked content — real secrets are replaced with tokens.
     approve_p = sub.add_parser("approve-all", help="Approve all detections + submit")
     approve_p.add_argument("scan_id", help="Scan ID")
 
+    # grant-ai — give an AI its own read-only access to the masked mirror
+    grant_p = sub.add_parser(
+        "grant-ai",
+        help="Give an AI read-only access to the masked mirror (deploy key)")
+    grant_p.add_argument("scan_id", help="Scan ID whose published mirror to grant on")
+    grant_p.add_argument("--repo", default="",
+                         help="Masked repo URL (default: the scan's publish target)")
+    grant_p.add_argument("--title", default="localmask-ai-readonly",
+                         help="Deploy-key title shown on GitHub")
+
     # set-key
     # config — read/set local settings (e.g. the publish approval policy)
     cfg_p = sub.add_parser("config",
@@ -1537,6 +1547,43 @@ The AI only sees masked content — real secrets are replaced with tokens.
                       f"(localmask review / approve-all).{RESET}")
             return
         print(f"  {RED}✗ Unknown setting '{args.key}'.{RESET} Known: publish-policy")
+        return
+
+    # grant-ai (local): give an AI its OWN read-only access to the masked mirror
+    # via a per-repo SSH deploy key. LocalMask never shares your git token.
+    if args.command == "grant-ai":
+        from server_core import _get_or_load_scan
+        from localmask.gitops import add_readonly_deploy_key, parse_git_target
+        url = args.repo
+        if not url:
+            sc = _get_or_load_scan(args.scan_id)
+            url = sc.get("publish_target", "") if sc else ""
+        if not url:
+            print(f"  {RED}✗ No masked repo URL.{RESET} Publish the mirror first "
+                  f"(`localmask publish {args.scan_id} <url>`) or pass --repo.")
+            return
+        tgt = parse_git_target(url)
+        safe = f"{tgt[1]}-{tgt[2]}" if tgt else "ai"
+        key_path = os.path.join(CONFIG_DIR, "keys", f"{safe}-ai")
+        print(f"\n  {CYAN}[LOCAL]{RESET} Granting an AI read-only access to "
+              f"{CYAN}{url}{RESET}…", flush=True)
+        res = add_readonly_deploy_key(url, key_path, args.title)
+        if not res.get("ok"):
+            print(f"  {RED}✗ {res['message']}{RESET}")
+            return
+        note = "already granted" if res.get("already") else "granted"
+        print(f"  {GREEN}✓ Read-only access {note}{RESET} "
+              f"{DIM}(a per-repo deploy key — not your git token){RESET}\n")
+        print(f"  {BOLD}Hand your AI/agent these two things:{RESET}")
+        print(f"    {DIM}1) its private key:{RESET} {CYAN}{res['key_path']}{RESET}")
+        print(f"    {DIM}2) the clone command:{RESET}")
+        print(f"       {CYAN}{res['clone_cmd']}{RESET}\n")
+        print(f"  {DIM}The AI clones the masked mirror (tokens only, no secrets), "
+              f"reads it, and authenticates as itself.{RESET}")
+        print(f"  {DIM}Keep it fresh:{RESET} localmask sync {args.scan_id}  "
+              f"{DIM}(re-masks + re-pushes; the AI does git pull){RESET}")
+        print(f"  {DIM}Revoke anytime:{RESET} gh repo deploy-key list --repo "
+              f"{res['owner']}/{res['repo']}  →  gh repo deploy-key delete <id>\n")
         return
 
     # approve-all (local): approve every detection and mark the scan approved,
