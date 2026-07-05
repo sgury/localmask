@@ -548,6 +548,144 @@
       "confidence": 0.65,
       "level": "strict",
       "reason": "SWIFT/BIC bank code"
+    },
+    "gitlab_pat": {
+      "pattern": "\\bglpat-[\\w-]{20}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "gitlab pat"
+    },
+    "npm_token": {
+      "pattern": "\\bnpm_[A-Za-z0-9]{36}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "npm token"
+    },
+    "pypi_upload_token": {
+      "pattern": "\\bpypi-AgEIcHlwaS5vcmc[\\w-]{50,}",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "pypi upload token"
+    },
+    "doppler_token": {
+      "pattern": "\\bdp\\.pt\\.[a-zA-Z0-9]{43}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "doppler token"
+    },
+    "digitalocean_pat": {
+      "pattern": "\\bdop_v1_[a-f0-9]{64}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "digitalocean pat"
+    },
+    "databricks_token": {
+      "pattern": "\\bdapi[a-f0-9]{32}\\b",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "databricks token"
+    },
+    "shopify_token": {
+      "pattern": "\\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "shopify token"
+    },
+    "square_token": {
+      "pattern": "\\b(?:EAAA|sq0atp-)[\\w-]{22,60}\\b",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "square token"
+    },
+    "planetscale_password": {
+      "pattern": "\\bpscale_pw_[\\w=.\\-]{32,64}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "planetscale password"
+    },
+    "postman_token": {
+      "pattern": "\\bPMAK-[a-f0-9]{24}-[a-f0-9]{34}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "postman token"
+    },
+    "hashicorp_tf_token": {
+      "pattern": "\\b[a-z0-9]{14}\\.atlasv1\\.[a-z0-9\\-_=]{60,70}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "hashicorp tf token"
+    },
+    "grafana_cloud_token": {
+      "pattern": "\\bglc_[A-Za-z0-9+/]{32,400}={0,3}",
+      "confidence": 0.95,
+      "level": "standard",
+      "reason": "grafana cloud token"
+    },
+    "linear_api_key": {
+      "pattern": "\\blin_api_[a-zA-Z0-9]{40}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "linear api key"
+    },
+    "dynatrace_token": {
+      "pattern": "\\bdt0c01\\.[A-Z0-9]{24}\\.[A-Z0-9]{64}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "dynatrace token"
+    },
+    "age_secret_key": {
+      "pattern": "\\bAGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}\\b",
+      "confidence": 0.99,
+      "level": "standard",
+      "reason": "age secret key"
+    },
+    "flyio_token": {
+      "pattern": "\\bfo1_[\\w-]{43}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "flyio token"
+    },
+    "huggingface_token": {
+      "pattern": "\\bhf_[a-zA-Z0-9]{34}\\b",
+      "confidence": 0.95,
+      "level": "standard",
+      "reason": "huggingface token"
+    },
+    "heroku_token_v2": {
+      "pattern": "\\bHRKU-AA[0-9a-zA-Z_-]{58}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "heroku token v2"
+    },
+    "pulumi_token": {
+      "pattern": "\\bpul-[a-f0-9]{40}\\b",
+      "confidence": 0.95,
+      "level": "standard",
+      "reason": "pulumi token"
+    },
+    "flutterwave_secret": {
+      "pattern": "\\bFLWSECK_TEST-[a-h0-9]{32}-X\\b",
+      "confidence": 0.95,
+      "level": "standard",
+      "reason": "flutterwave secret"
+    },
+    "onepassword_secret": {
+      "pattern": "\\bA3-[A-Z0-9]{6}-[A-Z0-9]{5,11}(?:-[A-Z0-9]{5})?-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}\\b",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "onepassword secret"
+    },
+    "ms_teams_webhook": {
+      "pattern": "https://[a-z0-9]+\\.webhook\\.office\\.com/webhookb2/[a-z0-9-]+@[a-z0-9-]+/IncomingWebhook/[a-z0-9]+/[a-z0-9-]+",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "ms teams webhook"
+    },
+    "twilio_api_key_sid": {
+      "pattern": "\\bSK[0-9a-fA-F]{32}\\b",
+      "confidence": 0.8,
+      "level": "strict",
+      "reason": "twilio api key sid"
     }
   },
   "file_type_extra": {
