@@ -468,6 +468,45 @@ def get_file_masked(scan_id: str, path: str) -> str:
     return json.dumps(result, indent=2)
 
 
+@mcp.tool()
+def mask_prompt(scan_id: str, text: str) -> str:
+    """Mask a question/prompt using this scan's found-secret vault, BEFORE it
+    reaches the AI — every known secret becomes a ~[TOKEN]~. Use this when the AI
+    reads the masked git repo itself: mask the user's question here, send only
+    the masked text, then call rehydrate_answer on the reply. No repo content or
+    secrets are sent.
+
+    Args:
+        scan_id: Scan ID (its vault defines what gets masked)
+        text: The prompt/question to mask
+    """
+    from localmask.state import _new_session, _get_or_load_scan
+    from localmask.masking import _mask_text
+    scan = _get_or_load_scan(scan_id)
+    if not scan:
+        return json.dumps({"error": f"Scan not found: {scan_id}"}, indent=2)
+    session = _new_session(scan["repo_url"], temp=False)   # hydrate vault only
+    return json.dumps({"masked_text": _mask_text(session, text)}, indent=2)
+
+
+@mcp.tool()
+def rehydrate_answer(scan_id: str, text: str) -> str:
+    """Turn ~[TOKEN]~ placeholders in an AI answer back into the real values
+    (local, exact, no key). Pair with mask_prompt for the read-from-git flow.
+
+    Args:
+        scan_id: Scan ID whose vault to use
+        text: The AI's answer containing ~[TOKEN]~ placeholders
+    """
+    from localmask.state import _new_session, _get_or_load_scan
+    from localmask.masking import _rehydrate
+    scan = _get_or_load_scan(scan_id)
+    if not scan:
+        return json.dumps({"error": f"Scan not found: {scan_id}"}, indent=2)
+    session = _new_session(scan["repo_url"], temp=False)   # hydrate vault only
+    return json.dumps({"text": _rehydrate(session, text)}, indent=2)
+
+
 @_cap_tool("web_ui")
 def submit_for_review(scan_id: str) -> str:
     """Submit a scan for security team approval.

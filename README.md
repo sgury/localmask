@@ -214,12 +214,30 @@ localmask ask <scan_id> "..." --provider grok      --api-key xai-...
 localmask ask <scan_id> "..." --provider groq      --api-key ...    # Meta/Llama
 localmask ask <scan_id> "..." --provider openrouter --base-url https://... --api-key ...
 ```
-LocalMask masks the repo + your question locally, sends only `~[TOKEN]~`
-placeholders to the provider **you** chose with **your** key, then rehydrates the
-answer locally. Keys can also come from env (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-`GEMINI_API_KEY`, `XAI_API_KEY`, or `LOCALMASK_AI_KEY`). Works with OpenAI,
-Anthropic, Google Gemini, xAI/Grok, Meta/Llama (via Groq/Together), OpenRouter,
-and any OpenAI-compatible endpoint.
+This default (`--source memory`) masks the repo + your question locally and
+sends only `~[TOKEN]~` placeholders to the provider **you** chose with **your**
+key, then rehydrates the answer locally. Keys can also come from env
+(`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or
+`LOCALMASK_AI_KEY`). Works with OpenAI, Anthropic, Google Gemini, xAI/Grok,
+Meta/Llama (via Groq/Together), OpenRouter, and any OpenAI-compatible endpoint.
+
+### Let the AI read the masked git itself — don't ship the repo (`--source git`)
+
+If the AI/agent already has its **own** read access to the published masked
+mirror, you don't need to send it the code at all:
+
+```bash
+localmask ask <scan_id> "Why does <a secret in your question> fail?" --source git
+#   --git-url <url>   (defaults to the scan's published mirror)
+```
+
+LocalMask **masks only your question** (by the found-secret vault — any real
+secret you type becomes a token), sends just that masked question **plus the repo
+URL** to your AI, and the AI **reads the private masked repo itself** with its own
+grant. The answer is rehydrated locally. **No repo content and no git credentials
+leave your machine** — only the masked question. (Best with agent/tool-capable
+AIs that can clone a repo. For the MCP/agent flow, the same thing is exposed as
+the `mask_prompt` and `rehydrate_answer` tools.)
 
 ### Or do it by hand — LocalMask never has to call anything
 ```bash

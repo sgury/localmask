@@ -346,7 +346,39 @@ def _local_ask(args):
     model = args.model or _ASK_DEFAULT_MODELS.get(provider, "gpt-4o")
     question = args.question or "Review this repository and flag the top security risks."
 
-    # rebuild the masked session from source (need masked file contents)
+    # ── Source = git: the AI reads the private masked git itself. LocalMask
+    #    sends ONLY the masked question + the repo URL — no repo content from
+    #    memory, no git credentials. (Use when the AI/agent has its own read
+    #    access to the published masked mirror.) ──────────────────────────────
+    if getattr(args, "source", "memory") == "git":
+        git_url = args.git_url or scan.get("publish_target", "")
+        if not git_url:
+            print(f"{RED}No masked git URL.{RESET} Publish the mirror first "
+                  f"(`localmask publish {args.scan_id} <url>`) or pass --git-url.")
+            sys.exit(1)
+        # Hydrate the vault only (value→token) so we can mask the question by
+        # found keys — we do NOT scan or load repo files here.
+        session = _new_session(scan["repo_url"], temp=False)
+        print(f"  {CYAN}[LOCAL]{RESET} masking your question by found keys; the "
+              f"AI reads {CYAN}{git_url}{RESET} itself.")
+        print(f"  {DIM}Only the masked question + the URL leave — no repo "
+              f"content, no keys.{RESET}", flush=True)
+        if provider == "dry":
+            from localmask.masking import _mask_text
+            print(f"  {DIM}[dry-run] masked question →{RESET} "
+                  f"{_mask_text(session, question)}")
+            return
+        try:
+            answer = ask_local.ask_over_git(session, question, git_url,
+                                            provider, key, model,
+                                            base_url=args.base_url)
+        except Exception as e:
+            print(f"{RED}Ask failed: {e}{RESET}"); sys.exit(1)
+        print(f"\n{answer}\n")
+        return
+
+    # ── Source = memory (default): mask the whole repo locally and include it in
+    #    the prompt (self-contained; works with any AI, no git access needed).
     print(f"  {CYAN}[LOCAL]{RESET} masking repo, asking {provider} ({model}) "
           f"with your key — only masked tokens leave...", flush=True)
     session = _new_session(scan["repo_url"], temp=False)

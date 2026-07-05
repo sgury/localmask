@@ -99,3 +99,28 @@ def ask(session: dict, question: str, provider: str, api_key: str, model: str,
     answer = call_model(provider, api_key, model, messages,
                         base_url=base_url, system=SYSTEM_PROMPT)
     return _rehydrate(session, answer)   # local, exact — no key involved
+
+
+GIT_SYSTEM_PROMPT = (
+    "You are answering a question about a MASKED code repository that you have "
+    "your OWN read access to. Read the files you need directly from that git "
+    "repository — its full content is NOT included in this prompt. Every secret "
+    "in it is already replaced by a token like ~[PASSWORD_0]~; never guess or "
+    "invent the real value behind a token, just refer to it by name. Be concise.")
+
+
+def ask_over_git(session: dict, question: str, git_url: str, provider: str,
+                 api_key: str, model: str, base_url: str = "") -> str:
+    """Ask a question WITHOUT sending any repository content. The AI reads the
+    masked repo itself (it has its own read access to git_url). LocalMask only
+    masks the question (using the found-secret vault) and rehydrates the answer —
+    no repo data and no git credentials leave the machine; the only thing sent to
+    your provider is the masked question and the repo URL."""
+    masked_q = _mask_text(session, question)   # mask the question by found keys
+    messages = [{"role": "user",
+                 "content": f"The masked repository is at: {git_url}\n"
+                            f"Read what you need from it, then answer.\n\n"
+                            f"Question: {masked_q}"}]
+    answer = call_model(provider, api_key, model, messages,
+                        base_url=base_url, system=GIT_SYSTEM_PROMPT)
+    return _rehydrate(session, answer)
