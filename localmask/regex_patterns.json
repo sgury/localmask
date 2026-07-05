@@ -14,7 +14,7 @@
       "reason": "AWS secret access key"
     },
     "private_key_header": {
-      "pattern": "-----BEGIN (RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY",
+      "pattern": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Private key"
@@ -112,7 +112,7 @@
       "reason": "Grafana service account token"
     },
     "sentry_dsn": {
-      "pattern": "https://[a-f0-9]{16,}@[a-z0-9.]+\\.ingest\\.sentry\\.io/\\d+",
+      "pattern": "https://[a-zA-Z0-9]{8,}@[a-z0-9.-]+\\.ingest\\.sentry\\.io/\\d+",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Sentry DSN"
