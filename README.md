@@ -174,8 +174,10 @@ in your shell history or in `ps`. **Don't** pass the token as an argument
 the git credentials already on your machine (e.g. `gh auth login`), or pass
 `--token` for a throwaway one-off.
 
-> Use a PAT with **`repo`** scope, and create the target mirror repo (empty, no
-> README) before `publish`.
+> **You don't need to create the masked repo yourself.** If it doesn't exist,
+> `publish` offers to create it for you (private by default) — via a stored
+> token or your `gh` CLI login — after asking. Use `--yes` to skip the prompt,
+> `--public` to make it public. Use a PAT with **`repo`** scope (or `gh auth`).
 
 ## How the git integration stays secure
 

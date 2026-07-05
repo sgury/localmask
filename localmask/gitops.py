@@ -161,6 +161,106 @@ def _should_publish(rel: str) -> bool:
     return True
 
 
+def parse_git_target(url: str):
+    """(host, owner, repo) for a github/gitlab-style URL, else None."""
+    u = (url or "").strip()
+    m = re.match(r"git@([\w.-]+):([^/]+)/(.+?)(?:\.git)?/?$", u)
+    if not m:
+        m = re.match(r"(?:ssh://git@|https?://)([\w.-]+)/([^/]+)/(.+?)(?:\.git)?/?$", u)
+    if not m:
+        return None
+    return m.group(1), m.group(2), m.group(3)
+
+
+def _gh_cli_available() -> bool:
+    return shutil.which("gh") is not None
+
+
+def remote_repo_exists(url: str, token: str = "") -> bool | None:
+    """True/False if we can tell whether the remote repo exists, else None.
+    Uses the GitHub API with a token, or the `gh` CLI (its own auth)."""
+    tgt = parse_git_target(url)
+    if not tgt:
+        return None
+    host, owner, repo = tgt
+    if host == "github.com" and token:
+        import urllib.request, urllib.error
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{owner}/{repo}",
+            headers={"Authorization": f"Bearer {token}",
+                     "Accept": "application/vnd.github+json",
+                     "User-Agent": "localmask"})
+        try:
+            urllib.request.urlopen(req, timeout=20)
+            return True
+        except urllib.error.HTTPError as e:
+            return False if e.code == 404 else None
+        except Exception:
+            return None
+    if host == "github.com" and _gh_cli_available():
+        r = subprocess.run(["gh", "repo", "view", f"{owner}/{repo}"],
+                           capture_output=True, timeout=30)
+        return r.returncode == 0
+    return None
+
+
+def create_remote_repo(url: str, token: str = "", private: bool = True):
+    """Create the remote masked repo. Returns (ok, message). Supports GitHub via
+    the API (with a token) or the `gh` CLI (its own auth)."""
+    tgt = parse_git_target(url)
+    if not tgt:
+        return False, "unrecognized git URL — create the repo manually."
+    host, owner, repo = tgt
+    if host != "github.com":
+        return False, (f"auto-create supports GitHub; create {owner}/{repo} on "
+                       f"{host} manually, then re-run.")
+    desc = "LocalMask masked mirror — tokens only, no real secrets."
+    if token:
+        import urllib.request, urllib.error, json as _json
+        # user vs org namespace
+        otype = "User"
+        try:
+            ir = urllib.request.Request(
+                f"https://api.github.com/users/{owner}",
+                headers={"Authorization": f"Bearer {token}",
+                         "User-Agent": "localmask"})
+            with urllib.request.urlopen(ir, timeout=20) as resp:
+                otype = _json.loads(resp.read()).get("type", "User")
+        except Exception:
+            pass
+        path = (f"/orgs/{owner}/repos" if otype == "Organization"
+                else "/user/repos")
+        body = _json.dumps({"name": repo, "private": private,
+                            "description": desc}).encode()
+        req = urllib.request.Request(
+            "https://api.github.com" + path, data=body, method="POST",
+            headers={"Authorization": f"Bearer {token}",
+                     "Accept": "application/vnd.github+json",
+                     "Content-Type": "application/json",
+                     "User-Agent": "localmask"})
+        try:
+            urllib.request.urlopen(req, timeout=30)
+            return True, ""
+        except Exception as e:
+            detail = ""
+            if hasattr(e, "read"):
+                try:
+                    detail = e.read().decode()[:200]
+                except Exception:
+                    pass
+            return False, f"GitHub API create failed: {getattr(e,'code','')} {detail or e}"
+    if _gh_cli_available():
+        vis = "--private" if private else "--public"
+        r = subprocess.run(
+            ["gh", "repo", "create", f"{owner}/{repo}", vis, "--description", desc],
+            capture_output=True, text=True, timeout=60)
+        if r.returncode == 0:
+            return True, ""
+        return False, f"gh repo create failed: {r.stderr.strip()[:200]}"
+    return False, ("no token and `gh` not found — run `localmask store-token`, "
+                   "or `gh auth login`, or create the repo manually.")
+
+
 def _git_tracked_files(src_dir: str) -> list[str] | None:
     """Return list of git-tracked relative paths, or None if not a git repo."""
     try:

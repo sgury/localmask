@@ -55,6 +55,21 @@ except ImportError:
         raise RuntimeError("Ask-AI is a Pro feature — not available in this edition.")
 
 
+def _cfg_publish_policy() -> str:
+    """Read the publish approval policy from ~/.localmask/config.json.
+    'review' (default) requires an approved review before publishing; 'auto'
+    auto-approves. Shared by the CLI and the MCP publish gate."""
+    try:
+        import json as _json
+        p = os.path.expanduser("~/.localmask/config.json")
+        if os.path.exists(p):
+            v = _json.load(open(p)).get("publish_policy", "review")
+            return v if v in ("review", "auto") else "review"
+    except Exception:
+        pass
+    return "review"
+
+
 class LocalMaskEngine:
     """Unified engine for LocalMask Pro operations.
 
@@ -449,9 +464,13 @@ class LocalMaskEngine:
         scan = _get_or_load_scan(scan_id)
         if not scan:
             raise KeyError(f"Scan not found: {scan_id}")
-        if scan["status"] not in ("submitted", "under_review"):
+        if scan["status"] not in ("submitted", "under_review", "draft"):
             raise ValueError(f"Cannot approve from status '{scan['status']}'")
 
+        # Approving clears the review: mark every detection decided.
+        for _d in scan.get("detections", []):
+            if _d.get("decision") in (None, "pending"):
+                _d["decision"] = "approved"
         scan["status"] = "approved"
         scan["reviewed_by"] = reviewer
         scan["review_comment"] = comment
@@ -484,20 +503,55 @@ class LocalMaskEngine:
 
     def publish_scan(self, scan_id: str, target_url: str,
                      credential_id: str = "", token: str = "",
-                     username: str = "") -> dict:
-        """Publish masked repo to git remote."""
+                     username: str = "", create_if_missing: bool = False,
+                     private: bool = True, require_approval: bool = False) -> dict:
+        """Publish masked repo to git remote. With create_if_missing, create the
+        remote repo first if it doesn't exist (GitHub via token or the gh CLI).
+        With require_approval, enforce the publish-policy approval gate (used by
+        the MCP path; the CLI runs its own interactive gate)."""
         scan = _get_or_load_scan(scan_id)
         if not scan:
             raise KeyError(f"Scan not found: {scan_id}")
+
+        if require_approval:
+            policy = _cfg_publish_policy()
+            pending = sum(1 for d in scan.get("detections", [])
+                          if d.get("decision") in (None, "pending"))
+            if policy == "auto":
+                for d in scan.get("detections", []):
+                    if d.get("decision") in (None, "pending"):
+                        d["decision"] = "approved"
+                scan["status"] = "approved"
+            elif not (scan.get("status") == "approved" and pending == 0):
+                raise RuntimeError(
+                    f"Not approved: {pending} detection(s) still need review. "
+                    f"Approve first (approve_scan / bulk_review), or set "
+                    f"publish-policy to auto.")
         session = SESSIONS.get(scan["session_key"])
         if not session:
-            raise RuntimeError("Session expired")
+            # Rebuild the masked session from source (per-process CLI/agent).
+            try:
+                self.sync_repo(scan_id, auto_republish=False)
+                scan = _get_or_load_scan(scan_id)
+                session = SESSIONS.get(scan["session_key"])
+            except Exception:
+                session = None
+        if not session:
+            raise RuntimeError("Could not rebuild the masked session for publish")
 
         resolved_token = ""
         if credential_id:
             resolved_token = _resolve_credential(credential_id)
         elif token:
             resolved_token = token
+
+        # Create the remote masked repo if asked and it doesn't exist yet.
+        if create_if_missing:
+            from localmask.gitops import remote_repo_exists, create_remote_repo
+            if remote_repo_exists(target_url, resolved_token) is False:
+                ok, msg = create_remote_repo(target_url, resolved_token, private)
+                if not ok:
+                    raise RuntimeError(f"Repo not found and auto-create failed: {msg}")
 
         tmp = tempfile.mkdtemp(prefix="lm_pub_")
         try:

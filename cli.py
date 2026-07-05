@@ -1285,6 +1285,10 @@ The AI only sees masked content — real secrets are replaced with tokens.
     pub_p.add_argument("--username", "-u", default="", help="Git username")
     pub_p.add_argument("--force", "-f", action="store_true",
                        help="Publish even if the review isn't approved (one-off)")
+    pub_p.add_argument("--yes", "-y", action="store_true",
+                       help="Create the masked repo without asking, if missing")
+    pub_p.add_argument("--public", action="store_true",
+                       help="If creating the masked repo, make it public (default: private)")
 
     # activate
     act_p = sub.add_parser("activate", help="Activate a LocalMask Pro license key")
@@ -1932,13 +1936,40 @@ The AI only sees masked content — real secrets are replaced with tokens.
                           f"'{args.credential_id}'.{RESET} Run "
                           f"`localmask store-token` to add one.")
                     return
+            # Auto-create the masked repo if it doesn't exist — ask first
+            # (unless --yes or the 'auto' policy). Then publish_scan creates it.
+            create_if_missing = False
+            from localmask.gitops import remote_repo_exists
+            exists = remote_repo_exists(args.target_url, token)
+            if exists is False:
+                vis = "public" if args.public else "private"
+                if args.yes or _publish_policy() == "auto":
+                    create_if_missing = True
+                    print(f"  {DIM}Masked repo not found — creating a {vis} "
+                          f"one…{RESET}")
+                else:
+                    try:
+                        ans = input(f"  {YELLOW}Masked repo doesn't exist.{RESET} "
+                                    f"Create it ({vis}) now? [Y/n]: ").strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        ans = "n"
+                    if ans in ("", "y", "yes"):
+                        create_if_missing = True
+                    else:
+                        print(f"  {DIM}Aborted — create it yourself, then "
+                              f"re-run publish.{RESET}")
+                        return
             try:
                 result = eng.publish_scan(
                     args.scan_id, args.target_url,
-                    token=token, credential_id="", username=args.username)
+                    token=token, credential_id="", username=args.username,
+                    create_if_missing=create_if_missing,
+                    private=not args.public)
             except Exception as e:
                 _publish_error_help(str(e), args.target_url, bool(token))
                 return
+            if create_if_missing:
+                print(f"  {GREEN}✓ Created the masked repo{RESET}")
             print(f"  {GREEN}✓ Published masked repo{RESET}")
             print(f"  {DIM}Pushed to:{RESET}  {result.get('pushed_to', args.target_url)}")
             print(f"  {DIM}Files:{RESET}      {result.get('files', '?')}")

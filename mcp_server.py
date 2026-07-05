@@ -500,29 +500,35 @@ def publish_masked_repo(
     scan_id: str,
     target_url: str,
     username: str = "",
+    credential_id: str = "",
+    private: bool = True,
 ) -> str:
-    """Publish the masked repository to a git remote.
+    """Publish the masked repository to a git remote so an AI/agent can read it.
 
-    All detected secrets are replaced with tokens. The published repo
-    is safe to share publicly. Uses the stored git credential automatically.
+    All detected secrets are replaced with ~[TOKEN]~ placeholders — the published
+    repo has no real secrets. If the remote repo doesn't exist yet it is created
+    automatically (GitHub, via a stored token or the `gh` CLI). Grant the AI its
+    own read access to that repo; LocalMask never shares your git credentials.
 
     Args:
         scan_id: Scan ID of a completed scan
-        target_url: Target git repo URL (e.g. https://github.com/org/masked-repo)
+        target_url: Target git repo URL (e.g. https://github.com/you/app-masked)
         username: Git username (optional, defaults to x-access-token)
+        credential_id: Credential id from `store-token` (optional; else uses gh)
+        private: Create the repo private if it must be created (default True)
     """
-    # Auto-use stored credential from ~/.localmask/config.json
-    credential_id = ""
-    try:
-        import pathlib
-        config_path = pathlib.Path.home() / ".localmask" / "config.json"
-        if config_path.exists():
-            cfg = json.loads(config_path.read_text())
-            credential_id = cfg.get("credential_id", "")
-    except Exception:
-        pass
+    # Resolve a locally-stored git token if a credential id was given.
+    token = ""
+    if credential_id:
+        try:
+            from localmask.vault_store import get_local_credential
+            token = get_local_credential(credential_id) or ""
+        except Exception:
+            token = ""
     result = _safe(engine.publish_scan, scan_id, target_url,
-                   credential_id=credential_id, username=username)
+                   token=token, username=username,
+                   create_if_missing=True, private=private,
+                   require_approval=True)
     return json.dumps(result, indent=2)
 
 
