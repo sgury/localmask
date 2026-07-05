@@ -172,6 +172,15 @@ def _get_client() -> ServiceClient:
 
 
 def _is_connected() -> bool:
+    # The free edition is local-only — never route to a service. This stops a
+    # stale service_url (e.g. left over from a prior/Pro install) from hijacking
+    # local scans. Pro/Team/Enterprise may still use a hosted server.
+    try:
+        from localmask._edition import has_capability
+        if not has_capability("web_ui"):
+            return False
+    except Exception:
+        pass
     return bool(_load_config().get("service_url"))
 
 
