@@ -33,6 +33,14 @@ from localmask.masking import _mask_text, _rehydrate
 from localmask.engine import _scan_dir, _scan_file, _remask, _get_bert, _get_ner
 from localmask.publish import _auto_publish
 
+# Enterprise audit trail. Optional: absent below Team builds, and a no-op
+# below the ent tier even when present — call sites stay unconditional.
+try:
+    from localmask.audit import audit_event as _audit
+except ImportError:
+    def _audit(*a, **k):
+        return None
+
 # Ask-AI (cloud egress — the only non-local feature). Optional: absent in the
 # free edition, so import defensively.
 try:
@@ -119,6 +127,8 @@ class LocalMaskEngine:
                 _git_clone_secure(source, src_dir, resolved_token)
             except subprocess.CalledProcessError as e:
                 shutil.rmtree(src_dir, ignore_errors=True)
+                _audit("scan", actor=submitted_by, repo=source, ok=False,
+                       error="clone failed")
                 raise RuntimeError(f"Clone failed: {e.stderr.decode()[:300]}")
         else:
             src_dir = source if os.path.isabs(source) else os.path.join(os.getcwd(), source)
@@ -159,6 +169,9 @@ class LocalMaskEngine:
         }
         SCANS[scan_id] = scan_record
         _persist_scan(scan_id)
+        _audit("scan", actor=submitted_by, scan_id=scan_id,
+               repo=scan_record["repo_url"], sensitivity=sensitivity,
+               files=len(session.get("files", {})), detections=len(detections))
         return _scan_to_dict(scan_record)
 
     # ── Sync (re-scan on git update) ───────────────────────────────────────
@@ -204,6 +217,8 @@ class LocalMaskEngine:
                 _git_clone_secure(source, src_dir, resolved_token)
             except subprocess.CalledProcessError as e:
                 shutil.rmtree(src_dir, ignore_errors=True)
+                _audit("sync", scan_id=scan_id, repo=source, ok=False,
+                       error="clone failed")
                 raise RuntimeError(f"Clone failed: {e.stderr.decode()[:300]}")
         else:
             src_dir = source if os.path.isabs(source) else os.path.join(os.getcwd(), source)
@@ -307,6 +322,9 @@ class LocalMaskEngine:
         }
         if pub_result:
             result["re_published"] = pub_result
+        _audit("sync", scan_id=scan_id, repo=source,
+               total=len(new_dets), new=new_count, removed=removed_count,
+               carried=carried, republished=bool(pub_result))
         return result
 
     # ── Scan Queries ─────────────────────────────────────────────────────────
@@ -424,6 +442,9 @@ class LocalMaskEngine:
 
         scan["updated_at"] = datetime.now(timezone.utc).isoformat()
         _persist_scan(scan_id)
+        _audit("review", actor=reviewer, scan_id=scan_id,
+               repo=scan.get("repo_url", ""), decided=updated,
+               feedback=feedback_added)
         return {"ok": True, "updated": updated, "scan_id": scan_id,
                 "feedback_added": feedback_added}
 
@@ -451,11 +472,15 @@ class LocalMaskEngine:
                     f"{threshold*100:.0f}% confidence threshold"
                 )
                 _auto_publish(scan)
+                _audit("submit", actor=submitted_by, scan_id=scan_id,
+                       repo=scan.get("repo_url", ""), auto_approved=True)
                 return {"ok": True, "status": "approved", "scan_id": scan_id,
                         "auto_approved": True}
 
         _notify(scan_id, "security_team", "submitted",
                 f"Scan {scan_id} submitted by {submitted_by}")
+        _audit("submit", actor=submitted_by, scan_id=scan_id,
+               repo=scan.get("repo_url", ""), auto_approved=False)
         return {"ok": True, "status": "submitted", "scan_id": scan_id}
 
     def approve_scan(self, scan_id: str, reviewer: str = "security_manager",
@@ -479,6 +504,9 @@ class LocalMaskEngine:
         _notify(scan_id, scan.get("submitted_by", "developer"), "approved",
                 f"Scan {scan_id} approved by {reviewer}")
         pub_result = _auto_publish(scan)
+        _audit("approve", actor=reviewer, scan_id=scan_id,
+               repo=scan.get("repo_url", ""), comment=comment[:200],
+               auto_published=bool(pub_result))
         result = {"ok": True, "status": "approved", "scan_id": scan_id}
         if pub_result:
             result["published"] = pub_result
@@ -497,6 +525,8 @@ class LocalMaskEngine:
         scan["reviewed_by"] = reviewer
         scan["review_comment"] = comment
         scan["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _audit("reject", actor=reviewer, scan_id=scan_id,
+               repo=scan.get("repo_url", ""), comment=comment[:200])
         return {"ok": True, "status": "rejected", "scan_id": scan_id}
 
     # ── Publishing ───────────────────────────────────────────────────────────
@@ -566,8 +596,12 @@ class LocalMaskEngine:
             _git_push_secure(tmp, target_url, resolved_token, username)
             scan["status"] = "published"
             scan["updated_at"] = datetime.now(timezone.utc).isoformat()
+            _audit("publish", scan_id=scan_id, repo=scan.get("repo_url", ""),
+                   target=target_url, files=written)
             return {"ok": True, "pushed_to": target_url, "files": written}
         except subprocess.CalledProcessError as e:
+            _audit("publish", scan_id=scan_id, repo=scan.get("repo_url", ""),
+                   target=target_url, ok=False, error="push failed")
             raise RuntimeError(f"Push failed: {e.stderr.decode()[:400]}")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -614,6 +648,10 @@ class LocalMaskEngine:
         scan["summary_stats"] = _scan_stats(scan["detections"], session)
         scan["updated_at"] = datetime.now(timezone.utc).isoformat()
         _persist_scan(scan_id)
+        # Audit the teach action itself — never the taught value.
+        _audit("teach", scan_id=scan_id, repo=scan.get("repo_url", ""),
+               teach_action=action, subtype=subtype,
+               detections=len(scan["detections"]))
         return {"ok": True, "action": action, "detection_count": len(scan["detections"])}
 
     # ── AI Chat ──────────────────────────────────────────────────────────────
@@ -694,6 +732,10 @@ class LocalMaskEngine:
         history.append({"role": "assistant", "content": raw_answer})
         answer = _rehydrate(session, raw_answer) if session else raw_answer
 
+        # The one egress path — record that masked context left the machine.
+        _audit("ask_ai", scan_id=scan_id, repo=scan.get("repo_url", ""),
+               provider=provider, model=model, source=source,
+               repo_context_sent=not context_loaded)
         return {
             "status": "OK", "scan_id": scan_id, "source": source,
             "provider": provider, "masked_question": masked_q,

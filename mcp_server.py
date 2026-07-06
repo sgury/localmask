@@ -811,6 +811,54 @@ def set_api_key(provider: str, key: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# AUDIT TRAIL TOOLS (Enterprise)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@_cap_tool("audit_log")
+def audit_trail(limit: int = 20, action: str = "") -> str:
+    """Show the tamper-evident audit trail (Enterprise).
+
+    Every scan, sync, review, approve/reject, publish, teach, and ask-AI
+    event is recorded — actors, counts, and outcomes, never secret values.
+
+    Args:
+        limit: Number of most recent events to return
+        action: Filter by action type (scan, sync, review, approve, reject,
+                publish, teach, ask_ai) — empty for all
+    """
+    from localmask.audit import read_events
+    events = read_events(limit=limit, action=action)
+    return json.dumps({"events": events, "count": len(events)}, indent=2)
+
+
+@_cap_tool("audit_log")
+def audit_export(format: str = "jsonl", out_path: str = "",
+                 action: str = "", since: str = "") -> str:
+    """Export the audit trail to a file for SIEM/compliance (Enterprise).
+
+    Args:
+        format: "jsonl" or "csv"
+        out_path: Output file path (default: ~/.localmask/audit/audit-export-<ts>)
+        action: Filter by action type — empty for all
+        since: Only events at/after this ISO-8601 timestamp
+    """
+    from localmask.audit import export_audit
+    try:
+        return json.dumps(export_audit(format, out_path, action, since), indent=2)
+    except (ValueError, OSError) as e:
+        return json.dumps({"error": str(e)})
+
+
+@_cap_tool("audit_log")
+def audit_verify() -> str:
+    """Verify the audit trail's hash chain is intact — proves no record was
+    altered or deleted (Enterprise)."""
+    from localmask.audit import verify_chain
+    return json.dumps(verify_chain(), indent=2)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 

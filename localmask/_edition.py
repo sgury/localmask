@@ -15,7 +15,7 @@ license-gated (single-tree dev). `capabilities()` reconciles both.
 import os
 
 # Overwritten at build time by build-dist.sh. Env var wins for dev/testing.
-EDITION = os.environ.get("LOCALMASK_EDITION", "pro")
+EDITION = os.environ.get("LOCALMASK_EDITION", "free")
 
 # Capability → minimum edition that includes it.
 _CAP_MIN_EDITION = {
@@ -34,6 +34,8 @@ _CAP_MIN_EDITION = {
     "org_rules":      "team",   # shared team rules server
     "shared_vault":   "team",   # team-wide Redis token vault (consistent tokens)
     "ldap_auth":      "ent",    # LDAP/AD auth + group→tier mapping
+    "audit_log":      "ent",    # tamper-evident audit trail + export (SIEM)
+    "sso_saml":       "ent",    # SSO sign-in on the org server (OIDC + SAML)
 }
 
 _ORDER = {"free": 0, "pro": 1, "team": 2, "ent": 3}
@@ -76,6 +78,7 @@ def _source_present(cap: str) -> bool:
         "ask_ai": "localmask.askai",
         "ai_proxy": "localmask.proxy",
         "ldap_auth": "localmask.ldap_auth",
+        "audit_log": "localmask.audit",
     }.get(cap)
     if not needed_module:
         return True
