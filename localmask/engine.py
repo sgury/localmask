@@ -278,6 +278,61 @@ def _luhn_ok(value: str) -> bool:
     return total % 10 == 0
 
 
+# Special characters that appear in generated passwords/keys but not in code
+# identifiers, versions, datetimes, or dtype strings. Separators (- _ . / :)
+# and '=' are deliberately excluded — '=' is an assignment operator and
+# base64 padding, so it signals code (key=value), not a secret.
+_SECRET_SPECIAL = re.compile(r"[!@#$%^&*~]")
+# Brackets/quotes/pipes/backslashes mean the value is code or a data row;
+# masking one would also corrupt the identical code elsewhere in the file.
+_CODE_PUNCT = re.compile(r"""[()\[\]{}<>|\\'"`]""")
+_SHELL_VAR = re.compile(r"\$\{|\$[A-Za-z_]{2,}")
+# Value shapes that are never secrets even next to an api_key/token variable:
+# a bare domain/host (label.label.tld, incl. cloud suffixes) or a Firebase-
+# style app-id (1:234567890123:web:abcdef…). Underscores excluded from the
+# host form so leetspeak keys like acme_tw1l10_4uth_… are NOT swallowed.
+_NONSECRET_VALUE = re.compile(
+    r"(?:[a-z0-9][a-z0-9-]*\.)+[a-z]{2,}"          # domain / FQDN
+    r"|\d+:\d+:[a-z]+:[0-9a-f]+", re.I)             # firebase appId
+_HEX_TOKEN = re.compile(r"[0-9a-fA-F]{32,}")
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+                   r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def _looks_generated(value: str) -> bool:
+    """Decide whether a context-LESS 'secret' guess is trustworthy.
+
+    When a nearby variable name already labelled the value (password=,
+    API_KEY:, …) we trust that and never call this. This gate is only for the
+    generic fallback — a value flagged purely because it "looks random." To
+    survive it a value must actually look *generated*:
+      - contiguous (no whitespace) and free of code/bracket punctuation, so
+        it's a single opaque token and masking it can't corrupt code; and
+      - carry real character diversity — all of upper/lower/digit, OR a
+        special char plus two classes.
+    Package names (scipy-openblas32), versions (2.1.0.dev0), datetimes
+    (1959-10-13T12:34:56), dtype codes (GDFgdfQq?) and regex fragments all
+    fail; passwords (P0stgr3s!Pr0d#2024) and API tokens (7xK2nM5pQ8rS…) pass.
+    """
+    if any(c.isspace() for c in value) or _CODE_PUNCT.search(value):
+        return False
+    # Shell/template variable references ($LLVM_PREFIX, ${VAR}, $env:…) are
+    # unexpanded templates — the secret, if any, is the variable's value.
+    if _SHELL_VAR.search(value):
+        return False
+    # Pure hex tokens (≥32: MD5/SHA/Twilio-style) and UUIDs are generated
+    # credential shapes even though hex is only two classes. The ≥32 floor
+    # keeps short hex constants like "0123456789abcdef" out.
+    if _HEX_TOKEN.fullmatch(value) or _UUID.fullmatch(value):
+        return True
+    classes = sum([any(c.isupper() for c in value),
+                   any(c.islower() for c in value),
+                   any(c.isdigit() for c in value)])
+    if classes >= 3:
+        return True
+    return bool(_SECRET_SPECIAL.search(value)) and classes >= 2
+
+
 _PAIRS = {"(": ")", "[": "]", "{": "}"}
 _PAIRS_REV = {c: o for o, c in _PAIRS.items()}
 
@@ -486,76 +541,6 @@ def _scan_entropy_strings(content: str, file_ext: str,
             if value in already_found:
                 continue
 
-            # Identifiers / package names ("get_f2py_modulename",
-            # "scipy-openblas32") — names referenced in strings also exist
-            # as code (def lines, imports); masking them corrupts the code,
-            # and a name is not a secret.
-            if re.fullmatch(r"[A-Za-z_][\w\-.]*", value) and \
-                    sum(c.isdigit() for c in value) <= 4:
-                continue
-            # Public-key fingerprints (colon-separated hex pairs) are not
-            # secrets — they're published to identify keys.
-            if re.fullmatch(r"(?:[0-9a-fA-F]{2}:){7,}[0-9a-fA-F]{2}", value):
-                continue
-            # Code-shaped strings: repr expectations ("StringDType(coerce=
-            # False)"), kwarg/config chains (detect_leaks=1:symbolize=1),
-            # CI directives (::group::…). Masking code-as-text corrupts the
-            # identical real code elsewhere in the file, and none are secrets.
-            if "::" in value or re.search(r"[A-Za-z_]\w*\(", value) \
-                    or re.search(r"\w+=\w+", value):
-                continue
-            # Unexpanded env-var references ($LLVM_PREFIX/bin/clang,
-            # suppressions=$GITHUB_WORKSPACE/…) are templates, same rule
-            # as {{ }} placeholders — the secret would be the var's value.
-            if re.search(r"\$\{?[A-Z_]{2,}", value):
-                continue
-            # ── Structural rejects: code/data shapes that are never secrets.
-            # Real keys are single opaque runs — they don't carry escape
-            # sequences, regex metachars, bracket pairs, CSV separators,
-            # templates, comparisons, or flag prefixes. Everything below was
-            # validated against the numpy corpus (see 2026-07-07 FP report).
-            if "\\n" in value or "\\r" in value or "\\x" in value:
-                continue          # literal escapes → test data / templates
-            if value[0] in "-!%#<(@;?*":
-                continue          # flags, directives, type-code strings
-            if "(?" in value or "\\d" in value or "\\w" in value \
-                    or "\\s" in value or "\\Z" in value:
-                continue          # regex source text
-            if "[" in value and "]" in value:
-                continue          # dtype/slice/character-class syntax
-            if value.count(",") >= 2 or value.count(";") >= 2:
-                continue          # CSV rows, flag lists
-            if "$(" in value or re.search(r"#\w+#", value) or "->" in value \
-                    or ">=" in value or "<=" in value:
-                continue          # build templates (#name# markers), comparisons
-                                  # NB: a bare '#' is NOT a reject — strong
-                                  # passwords contain it (K3yst0re!…#2024)
-            if "None" in value or "self." in value:
-                continue          # pytest param ids, attribute chains
-            if re.match(r"[+-]?\d+[.\-/:]\d", value):
-                continue          # versions, floats, dates, times, ratios
-            if re.fullmatch(r"[\w.\-]+\.[a-z0-9]{1,4}", value, re.I):
-                continue          # filenames
-            if re.fullmatch(r"[a-z_][\w.]*\.[\w]+:[a-z_][\w.]*", value):
-                continue          # entry points (pkg.mod:func) — left side
-                                  # needs a dotted lowercase path so colon-
-                                  # joined keys (AAAA…:APA91…) stay flagged
-            if "|" in value or "0x" in value:
-                continue          # regex alternations, hex literals
-            if re.fullmatch(r"[A-Za-z]+\??", value):
-                continue          # pure-alpha runs (dtype code strings)
-            # Identifier-shaped rejects apply only to digit-light values —
-            # real keys are digit-heavy (acme_binance_secret_xYz987… is
-            # identifier-shaped but has 9 digits and must stay flagged).
-            if sum(c.isdigit() for c in value) <= 4:
-                if re.fullmatch(r"[A-Za-z_][\w.]*:?", value):
-                    continue      # dotted identifier, opt. trailing colon
-                if re.fullmatch(r"[A-Za-z_][\w.]*(?:[, ]+[A-Za-z_][\w.]*)+",
-                                value):
-                    continue      # identifier lists ("intproductf2pywrap, intpr")
-            if sum(c.isdigit() for c in value) > 0.75 * len(value):
-                continue          # numeric blobs (test constants)
-
             # HTTP headers / localhost example connection strings are never
             # secrets (shared filter with the regex layer).
             if RegexRulesSafe._is_noise_value(value):
@@ -614,11 +599,29 @@ def _scan_entropy_strings(content: str, file_ext: str,
             if safe_context_re.search(stripped) and not secret_context_re.search(stripped):
                 continue
 
+            # A value that is plainly a domain/host, cloud endpoint, or an
+            # app-id triplet is not a secret no matter what the nearby
+            # variable is called (Firebase config puts authDomain, appId and
+            # storageBucket right next to apiKey). Veto by value shape before
+            # trusting the context name.
+            if _NONSECRET_VALUE.fullmatch(value):
+                continue
+
             # ── Infer type from context ──────────────────────────────────
             context_window = _get_context_window(line_num - 1)
             inferred_type, reason = _infer_secret_type(value, context_window)
             if not inferred_type:
                 continue  # Safe variable name — not a secret
+
+            # ── Diversity gate for context-less guesses ──────────────────
+            # A specific inferred_type means a nearby variable name identified
+            # the secret — trust it. The generic "secret" fallback is a pure
+            # "looks random" guess with no naming signal, and that's where all
+            # the noise lands (regex sources, dtype codes, datetimes, package
+            # names). Keep it only if the value actually looks generated. This
+            # single positive rule replaces the old per-shape blocklist.
+            if inferred_type == "secret" and not _looks_generated(value):
+                continue
 
             # ── Confidence based on signals ──────────────────────────────
             confidence = 0.75
