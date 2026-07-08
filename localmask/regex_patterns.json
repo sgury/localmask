@@ -710,6 +710,18 @@
       "confidence": 0.85,
       "level": "standard",
       "reason": "Hyphenated secret key (k8s/yaml stringData)"
+    },
+    "imei_number": {
+      "pattern": "\\b\\d{2}[\\s-]\\d{6}[\\s-]\\d{6}[\\s-]\\d\\b",
+      "confidence": 0.85,
+      "level": "strict",
+      "reason": "IMEI device identifier (PII)"
+    },
+    "imei_keyword": {
+      "pattern": "(?i)\\bimei\\b['\\\":\\s#=]{1,4}(\\d{15})\\b",
+      "confidence": 0.9,
+      "level": "strict",
+      "reason": "IMEI device identifier (PII, keyed)"
     }
   },
   "file_type_extra": {

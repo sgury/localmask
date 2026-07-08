@@ -950,6 +950,8 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # A decoded-and-verified base64 blob (or an FCM key) beats a generic
         # entropy claim on the same value — and masks directly (above).
         "base64_encoded_secret", "fcm_server_key",
+        # IMEI's distinctive grouping beats a server_hostname value-shape guess.
+        "imei_number", "imei_keyword",
     }
     # Inferred infra/PII types (from _infer_secret_type value heuristics) that
     # are not credentials — gated to 'strict' so standard scans stay low-noise.
