@@ -325,6 +325,12 @@ Everything is local. There is no telemetry and no network call in the free editi
 | Team-shared vault (consistent tokens across machines) | — | — | ✓ |
 | Org shared rules · LDAP/AD · SSO | — | — | ✓ |
 
+## Feedback
+
+Found a false positive, a missed secret, or have a feature request?
+Email **feedback@localmaskpro.com** or open an issue at
+https://github.com/sgury/localmask/issues — we read everything.
+
 ## License
 
 Free edition released under the MIT license. See `LICENSE`.
