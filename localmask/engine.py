@@ -278,6 +278,19 @@ def _luhn_ok(value: str) -> bool:
     return total % 10 == 0
 
 
+_PAIRS = {"(": ")", "[": "]", "{": "}"}
+_PAIRS_REV = {c: o for o, c in _PAIRS.items()}
+
+def _trim_unbalanced(v: str) -> str:
+    """Strip leading openers / trailing closers whose partner isn't inside
+    the value. Masking half of a bracket pair corrupts the surrounding code."""
+    while v and v[0] in _PAIRS and _PAIRS[v[0]] not in v:
+        v = v[1:]
+    while v and v[-1] in _PAIRS_REV and _PAIRS_REV[v[-1]] not in v:
+        v = v[:-1]
+    return v.strip()
+
+
 _WORD_LIKE_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9_\-\.]{2,39}$')
 _HAS_SPECIAL  = re.compile(r'[!@#$%^&*()\[\]{}|;:<>?,\\/\'"~`]')
 
@@ -432,8 +445,12 @@ def _scan_entropy_strings(content: str, file_ext: str,
     from collections import Counter
 
     results = []
-    # Match single or double quoted strings (at least 12 chars)
-    string_pat = re.compile(r"""(['"])([^'"]{12,})\1""")
+    # Match ALL quoted strings (any length, escapes respected) and length-
+    # filter afterwards. A minimum length in the regex itself made short
+    # strings invisible, so 'NaT'), np.datetime64('2038' matched from one
+    # string's CLOSING quote to the next one's opener — capturing raw code
+    # between strings and corrupting it at mask time.
+    string_pat = re.compile(r"""(['"])((?:[^'"\\]|\\.)*)\1""")
     # Context keywords that boost confidence the string is a secret
     secret_context_re = re.compile(
         r"(?i)(key|secret|token|password|api|auth|credential|internal|private"
@@ -462,9 +479,35 @@ def _scan_entropy_strings(content: str, file_ext: str,
 
         for m in string_pat.finditer(line):
             value = m.group(2)
+            if len(value) < 12:
+                continue
 
             # Already detected by regex layer
             if value in already_found:
+                continue
+
+            # Identifiers / package names ("get_f2py_modulename",
+            # "scipy-openblas32") — names referenced in strings also exist
+            # as code (def lines, imports); masking them corrupts the code,
+            # and a name is not a secret.
+            if re.fullmatch(r"[A-Za-z_][\w\-.]*", value) and \
+                    sum(c.isdigit() for c in value) <= 4:
+                continue
+            # Public-key fingerprints (colon-separated hex pairs) are not
+            # secrets — they're published to identify keys.
+            if re.fullmatch(r"(?:[0-9a-fA-F]{2}:){7,}[0-9a-fA-F]{2}", value):
+                continue
+            # Code-shaped strings: repr expectations ("StringDType(coerce=
+            # False)"), kwarg/config chains (detect_leaks=1:symbolize=1),
+            # CI directives (::group::…). Masking code-as-text corrupts the
+            # identical real code elsewhere in the file, and none are secrets.
+            if "::" in value or re.search(r"[A-Za-z_]\w*\(", value) \
+                    or re.search(r"\w+=\w+", value):
+                continue
+            # Unexpanded env-var references ($LLVM_PREFIX/bin/clang,
+            # suppressions=$GITHUB_WORKSPACE/…) are templates, same rule
+            # as {{ }} placeholders — the secret would be the var's value.
+            if re.search(r"\$\{?[A-Z_]{2,}", value):
                 continue
 
             # HTTP headers / localhost example connection strings are never
@@ -499,6 +542,9 @@ def _scan_entropy_strings(content: str, file_ext: str,
                 continue
             if " " in value and value.count(" ") >= 2:
                 continue  # Looks like natural language (3+ words)
+            if " " in value and not has_digit:
+                continue  # Two Title-Case words (CI step names, prose) — real
+                          # secrets with spaces are rare and carry digits
             if value.count("/") > 3 and "://" not in value:
                 continue  # Looks like a file path
             # ── Non-secret identifiers (verified 0 overlap with real secrets):
@@ -726,7 +772,13 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
     }
     seen: dict = {}
     for d in raw_detections:
-        v = d["entity"]
+        # Trim unbalanced brackets a regex may have swallowed (e.g. a phone-
+        # like match on "seed(1301109903"). Masking an unpaired "(" breaks
+        # the surrounding code — a token must never eat one side of a pair.
+        v = _trim_unbalanced(d["entity"])
+        if len(v) < 3:
+            continue
+        d["entity"] = v
         if v in allowed:
             continue
         # Unresolved templates are placeholders, not real values — e.g.
@@ -741,10 +793,13 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         if sensitivity != "strict" \
                 and d.get("type", "") in _STRICT_ONLY_INFERRED:
             continue
-        reason = d.get("pattern_reason", "")
-        if reason == "credit_card" and not _luhn_ok(v):
+        # NB: match on the pattern NAME ("type"), not pattern_reason — the
+        # reason field carries prose ("Credit card number"), so comparing it
+        # against names meant these filters never fired.
+        dtype = d.get("type", "")
+        if dtype in ("credit_card", "credit_card_grouped") and not _luhn_ok(v):
             continue
-        if reason in ("password_assignment", "declare_password", "any_env_password"):
+        if dtype in ("password_assignment", "declare_password", "any_env_password"):
             if _is_word_like(v):
                 continue
         if v not in seen:

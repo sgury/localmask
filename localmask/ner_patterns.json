@@ -1,5 +1,5 @@
 {
-  "_comment": "NER detection data \u2014 editable without touching code. Loaded at runtime by ner_scanner.py. tech_terms: words that are public tech vocab (never PII). fallback_patterns: regex NER when spaCy is absent. noise_keywords: SQL/DDL starts to ignore. ner_risk: entity-type risk/level/confidence.",
+  "_comment": "NER detection data — editable without touching code. Loaded at runtime by ner_scanner.py. tech_terms: words that are public tech vocab (never PII). fallback_patterns: regex NER when spaCy is absent. noise_keywords: SQL/DDL starts to ignore. ner_risk: entity-type risk/level/confidence.",
   "ner_risk": {
     "PERSON": {
       "risk": "MEDIUM",
@@ -235,14 +235,14 @@
       "pattern": "\\b([A-Z][a-z]{1,20}(?:\\s+[A-Z][a-z]{1,20}){1,3})\\b",
       "label": "PERSON",
       "confidence": 0.68,
-      "level": "standard",
+      "level": "strict",
       "reason": "Proper name (regex heuristic)"
     },
     {
       "pattern": "\\$\\s*\\d[\\d,]*(?:\\.\\d{1,2})?(?:\\s*(?:million|billion|thousand|k|M|B))?\\b",
       "label": "MONEY",
       "confidence": 0.85,
-      "level": "minimal",
+      "level": "strict",
       "reason": "Currency amount"
     },
     {
