@@ -1,6 +1,7 @@
 """The detection engine: regex + NER + entropy + LLM pipeline."""
 import os
 import re
+import time
 
 from regex_rules_safe import RegexRulesSafe
 
@@ -855,27 +856,48 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
                 needs_llm_idx.append(i)
 
         if needs_llm:
-            batch_items = [
-                {
-                    "entity": det["entity"],
-                    "context": det.get("context", "")[:200],
-                    "file_type": det.get("file_type", file_ext),
-                    "ner_label": det.get("ner_label", ""),
-                }
-                for det in needs_llm
-            ]
-            llm_results = bert.classify_batch(batch_items)
+            # ── LLM time budget (per scan, shared across files) ──────────
+            # The classifier only DEMOTES ambiguous detections to cut false
+            # positives — it's a refinement, never required for safety
+            # (keeping a detection can't leak). So it must not hold the scan
+            # hostage: on doc-heavy repos (numpy changelogs = thousands of
+            # names) the per-file blocking calls used to run 10+ minutes.
+            # Once the cumulative classifier time for this scan exceeds the
+            # budget, stop calling it and KEEP the remaining detections as-is
+            # (fail-safe = sensitive). Bounds total scan time regardless of
+            # repo size. LOCALMASK_LLM_BUDGET_SEC=0 disables the classifier.
+            budget = float(os.environ.get("LOCALMASK_LLM_BUDGET_SEC", "45"))
+            spent = session.get("_llm_spent", 0.0)
+            if spent >= budget:
+                for det in needs_llm:
+                    det["llm_decision"] = "SENSITIVE"
+                    det["llm_source"] = "budget"
+                    det["llm_reason"] = "classifier time budget reached — kept"
+                    filtered.append(det)
+            else:
+                batch_items = [
+                    {
+                        "entity": det["entity"],
+                        "context": det.get("context", "")[:200],
+                        "file_type": det.get("file_type", file_ext),
+                        "ner_label": det.get("ner_label", ""),
+                    }
+                    for det in needs_llm
+                ]
+                _t0 = time.time()
+                llm_results = bert.classify_batch(batch_items)
+                session["_llm_spent"] = spent + (time.time() - _t0)
 
-            for det, result in zip(needs_llm, llm_results):
-                if result:
-                    det["llm_decision"] = result["decision"]
-                    det["llm_confidence"] = round(result.get("confidence", 0), 3)
-                    det["llm_reason"] = result.get("reason", "")
-                    det["llm_source"] = result.get("source", "")
-                    if result["decision"] == "NOT_SENSITIVE":
-                        continue  # LLM says skip
-                    det["confidence"] = round(result.get("probability", 0.85), 3)
-                filtered.append(det)
+                for det, result in zip(needs_llm, llm_results):
+                    if result:
+                        det["llm_decision"] = result["decision"]
+                        det["llm_confidence"] = round(result.get("confidence", 0), 3)
+                        det["llm_reason"] = result.get("reason", "")
+                        det["llm_source"] = result.get("source", "")
+                        if result["decision"] == "NOT_SENSITIVE":
+                            continue  # LLM says skip
+                        det["confidence"] = round(result.get("probability", 0.85), 3)
+                    filtered.append(det)
 
         raw_detections = filtered
 
