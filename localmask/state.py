@@ -208,8 +208,13 @@ def _flatten_detections(session: dict) -> list:
                     det["files"].append(rel)
                 continue
 
-            # Resolve actual value from reverse vault
-            real_value = session.get("rev_vault", {}).get(tok, "")
+            # Resolve the actual value: the finding itself carries it; the
+            # reverse vault is only a fallback. Vault-first surfaced ghost
+            # detections with value='' — a later file can re-token the same
+            # value (or drop-cleanup can pop the entry), orphaning tokens
+            # that earlier files' findings still reference.
+            real_value = (fnd.get("value")
+                          or session.get("rev_vault", {}).get(tok, ""))
 
             det = {
                 "det_id": None,  # assigned after dedup

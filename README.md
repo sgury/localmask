@@ -12,13 +12,24 @@ engine, entropy detection, masking + rehydrate, a publishable masked repo, git
 sync, and a CLI + MCP server. No AI model, no cloud, no account.
 
 ### New in this version
-- **Persistent local vault** — tokens now stay stable across scans, syncs, and
-  process restarts (and rehydration works in a fresh process). The mapping is
-  stored in an encrypted local SQLite file (`~/.localmask/vault.sqlite`, 0600),
-  keyed by repo so re-scanning reuses the same tokens.
-- **Editable detection rules (data-driven)** — patterns live in
-  `regex_patterns.json`, not hard-coded. Add or tweak rules with no code:
-  edit the file, or call `RegexRulesSafe.add_pattern(...)` / `save_patterns()`.
+- **Finance Mode (relative)** — share financial *analysis* with an AI without
+  sharing a single real figure. `42,000 ₪` becomes `(0.42*R_SALARY)`: the AI
+  can compare and compute (Dana earns 1.2× Yossi), but the absolute amounts,
+  the currency and the scale never leave your machine. Enable with
+  `LOCALMASK_MONEY_MODE=relative`. See **Finance Mode** below.
+- **7 language packs** — PII labeled in non-English code and comments:
+  Hebrew (Israeli ID ת״ז, check-digit-validated, phones, addresses), Russian
+  (passports), Arabic (national IDs), Spanish (DNI, letter-validated), French,
+  German (Steuernummer), Italian (codice fiscale) — plus passwords labeled in
+  each language. Select with `LOCALMASK_LANGS=he,de` (default: all).
+- **Boundary-hardened engine** — no pattern (and no mask) can ever grab a
+  substring of a longer token: a key inside a hex/base64 blob is never falsely
+  matched, and masking never corrupts a file. Verified on numpy (2,300+ files,
+  zero noise).
+- **Persistent local vault** — tokens stay stable across scans, syncs, and
+  process restarts (encrypted local SQLite, `~/.localmask/vault.sqlite`, 0600).
+- **Editable detection rules (data-driven)** — patterns and language packs live
+  in `regex_patterns.json`; add or tweak rules with no code.
 
 > Want an AI model that catches what patterns miss and learns from your
 > corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) that
@@ -217,6 +228,49 @@ the git credentials already on your machine (e.g. `gh auth login`), or pass
   `~[TOKEN]~` placeholders; the real values stay in your local vault.
 - **Tokens can be stored short-lived and encrypted** (`store-token`), or not
   stored at all (`--token` per command).
+
+## Finance Mode — AI analysis of financials without the figures
+
+Teams that won't paste salaries, prices or revenues into an AI can still get
+AI analysis. Money amounts (currency-anchored: `₪ $ €`, or finance keywords
+like `salary` / `שכר` / `price`) are replaced before anything reaches the AI:
+
+```bash
+LOCALMASK_MONEY_MODE=relative localmask scan .
+```
+
+| What's on disk | What the AI sees |
+|---|---|
+| `שכר של דנה: 42,000 ₪` | `שכר של דנה: (1.15*R_SALARY)` |
+| `שכר של יוסי: 35,000 ₪` | `שכר של יוסי: (0.96*R_SALARY)` |
+| `revenue: 8,500,000 ILS` | `revenue: (0.89*R_REVENUE)` |
+
+The AI can compute — 1.15/0.96 means Dana earns 1.2× Yossi — but the real
+numbers, the currency and the scale stay on your machine. Each category
+(salary / revenue / price) gets its **own** crypto-random secret base, so
+cross-category ratios (payroll as % of revenue) are hidden too. AI answers are
+re-hydrated back to real numbers locally. `relative` is free and open source;
+the full opacity choice (`token` / `bucket`) is a
+[Pro](https://localmaskpro.com) capability. Honest threat model in
+[FINANCE.md](FINANCE.md).
+
+## Multilingual detection — 7 language packs
+
+Secrets and PII don't only hide in English. LocalMask ships keyword patterns
+for Hebrew, Russian, Arabic, Spanish, French, German and Italian:
+
+```text
+# ת"ז של הלקוח: 234569176        ← Israeli ID, check-digit validated
+# пароль: S3cur3!Pass74           ← password labeled in Russian
+; DNI: 12345678Z                  ← Spanish DNI, control-letter validated
+// كلمة المرور: Xk9$mPl2Qw        ← password labeled in Arabic
+```
+
+National IDs are checksum-validated (a random 9-digit number near "ת״ז" does
+NOT match), and every pattern is word-boundary guarded so digits inside a
+longer key or hash never fire. Pick packs with `LOCALMASK_LANGS=he,ru,de`
+(default: all; `none` disables). Adding a language is a JSON block in
+`regex_patterns.json` — no code.
 
 ## Using AI with LocalMask (free)
 

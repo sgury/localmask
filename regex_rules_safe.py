@@ -44,7 +44,30 @@ def _load_pattern_data():
         with open(_PATTERNS_FILE, encoding="utf-8") as fh:
             data = json.load(fh)
         _PATTERN_META = data
-        return data.get("universal", {}), data.get("file_type_extra", {})
+        universal = dict(data.get("universal", {}))
+        # Language packs: same entry shape as universal, grouped per language
+        # under "lang_packs" (Hebrew ת"ז / Russian паспорт / Spanish DNI …).
+        # LOCALMASK_LANGS selects packs ("he,ru"); default all, "none" = off.
+        packs = data.get("lang_packs", {}) or {}
+        want = os.environ.get("LOCALMASK_LANGS", "").strip().lower()
+        if not want:
+            # persisted setting (Web UI / org policy); env var always wins
+            try:
+                from localmask.settings_store import get_setting, org_lock
+                want = str(org_lock().get("langs")
+                           or get_setting("langs", "")).strip().lower()
+            except Exception:
+                want = ""
+        if want in ("", "all"):
+            selected = [k for k in packs if not k.startswith("_")]
+        elif want in ("none", "off", "0"):
+            selected = []
+        else:
+            selected = [l.strip() for l in want.split(",") if l.strip()]
+        for lang in selected:
+            for name, body in (packs.get(lang) or {}).items():
+                universal.setdefault(name, body)
+        return universal, data.get("file_type_extra", {})
     except (OSError, json.JSONDecodeError) as exc:
         print(f"[regex_rules_safe] WARNING: could not load {_PATTERNS_FILE}: {exc}")
         _PATTERN_META = {}

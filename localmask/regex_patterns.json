@@ -2,7 +2,7 @@
   "_comment": "LocalMask detection patterns — editable without touching code. Loaded at runtime by regex_rules_safe.py. Each entry: {pattern, confidence, level, reason}.",
   "universal": {
     "aws_access_key": {
-      "pattern": "AKIA[0-9A-Z]{16}",
+      "pattern": "(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![A-Za-z0-9])",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "AWS access key ID"
@@ -20,37 +20,37 @@
       "reason": "Private key"
     },
     "github_token": {
-      "pattern": "gh[pousr]_[A-Za-z0-9_]{36,}",
+      "pattern": "(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9_]{36,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "GitHub token"
     },
     "anthropic_key": {
-      "pattern": "sk-ant-[a-zA-Z0-9\\-_]{20,}",
+      "pattern": "(?<![A-Za-z0-9])sk-ant-[a-zA-Z0-9\\-_]{20,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Anthropic API key"
     },
     "openai_key": {
-      "pattern": "sk-[a-zA-Z0-9]{32,}",
+      "pattern": "(?<![A-Za-z0-9])sk-[a-zA-Z0-9]{32,}",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "OpenAI API key"
     },
     "google_api_key": {
-      "pattern": "AIza[0-9A-Za-z\\-_]{35}",
+      "pattern": "(?<![A-Za-z0-9])AIza[0-9A-Za-z\\-_]{35}(?![0-9A-Za-z\\-_])",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Google API key"
     },
     "slack_token": {
-      "pattern": "xox[baprs]-[0-9A-Za-z\\-]{10,}",
+      "pattern": "(?<![A-Za-z0-9])xox[baprs]-[0-9A-Za-z\\-]{10,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Slack token"
     },
     "slack_webhook": {
-      "pattern": "https://hooks\\.slack\\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+",
+      "pattern": "(?<![A-Za-z0-9])https://hooks\\.slack\\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Slack webhook URL"
@@ -62,13 +62,13 @@
       "reason": "Telegram bot token"
     },
     "stripe_key": {
-      "pattern": "(?:sk|pk)_(?:live|test)_[0-9a-zA-Z]{24,}",
+      "pattern": "(?<![A-Za-z0-9])(?:sk|pk)_(?:live|test)_[0-9a-zA-Z]{24,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Stripe API key"
     },
     "jwt_token": {
-      "pattern": "eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}",
+      "pattern": "(?<![A-Za-z0-9])eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "JWT token"
@@ -80,39 +80,39 @@
       "reason": "API / secret key assignment"
     },
     "bearer_token": {
-      "pattern": "(?i)bearer\\s+([a-zA-Z0-9\\-_.]{30,})",
+      "pattern": "(?i)(?<![A-Za-z0-9])bearer\\s+([a-zA-Z0-9\\-_.]{30,})",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Bearer token"
     },
     "sendgrid_key": {
-      "pattern": "SG\\.[a-zA-Z0-9_\\-]{10,}\\.[a-zA-Z0-9_\\-]{10,}",
+      "pattern": "(?<![A-Za-z0-9])SG\\.[a-zA-Z0-9_\\-]{10,}\\.[a-zA-Z0-9_\\-]{10,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "SendGrid API key",
       "mask_mode": "direct"
     },
     "stripe_webhook_secret": {
-      "pattern": "whsec_[a-zA-Z0-9]{20,}",
+      "pattern": "(?<![A-Za-z0-9])whsec_[a-zA-Z0-9]{20,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Stripe webhook signing secret"
     },
     "vault_token": {
-      "pattern": "hvs\\.[a-zA-Z0-9_\\-]{20,}",
+      "pattern": "(?<![A-Za-z0-9])hvs\\.[a-zA-Z0-9_\\-]{20,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "HashiCorp Vault token",
       "mask_mode": "direct"
     },
     "grafana_service_token": {
-      "pattern": "glsa_[a-zA-Z0-9_\\-]{20,}",
+      "pattern": "(?<![A-Za-z0-9])glsa_[a-zA-Z0-9_\\-]{20,}",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Grafana service account token"
     },
     "sentry_dsn": {
-      "pattern": "https://[a-zA-Z0-9]{8,}@[a-z0-9.-]+\\.ingest\\.sentry\\.io/\\d+",
+      "pattern": "(?<![A-Za-z0-9])https://[a-zA-Z0-9]{8,}@[a-z0-9.-]+\\.ingest\\.sentry\\.io/\\d+",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Sentry DSN"
@@ -142,25 +142,25 @@
       "reason": "PagerDuty service/API key"
     },
     "azure_shared_access_key": {
-      "pattern": "(?i)SharedAccessKey\\s*=\\s*([A-Za-z0-9+/=]{20,})",
+      "pattern": "(?i)(?<![A-Za-z0-9])SharedAccessKey\\s*=\\s*([A-Za-z0-9+/=]{20,})",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "Azure shared access key"
     },
     "consul_gossip_key": {
-      "pattern": "(?i)encrypt\\s*=\\s*[\"\\']?([A-Za-z0-9+/=]{20,})[\"\\']?",
+      "pattern": "(?i)(?<![A-Za-z0-9])encrypt\\s*=\\s*[\"\\']?([A-Za-z0-9+/=]{20,})[\"\\']?",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Consul gossip encryption key"
     },
     "mongodb_connection_string": {
-      "pattern": "mongodb(?:\\+srv)?://[^:/@\\s]+:[^@\\s'\\\"]{6,}@[^\\s'\\\"]+",
+      "pattern": "(?<![A-Za-z0-9])mongodb(?:\\+srv)?://[^:/@\\s]+:[^@\\s'\\\"]{6,}@[^\\s'\\\"]+",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "MongoDB connection string with credentials"
     },
     "jdbc_connection_string": {
-      "pattern": "jdbc:[a-z]+://[^\\s'\\\"]{10,}",
+      "pattern": "(?<![A-Za-z0-9])jdbc:[a-z]+://[^\\s'\\\"]{10,}",
       "confidence": 0.9,
       "level": "minimal",
       "reason": "JDBC connection string"
@@ -172,7 +172,7 @@
       "reason": "Azure SAS token"
     },
     "azure_sql_connection": {
-      "pattern": "(?i)Server=tcp:[^;]+;.*Password=[^;'\\\"]+",
+      "pattern": "(?i)(?<![A-Za-z0-9])Server=tcp:[^;]+;.*Password=[^;'\\\"]+",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Azure SQL connection string with password"
@@ -196,7 +196,7 @@
       "reason": "Redis CLI -a password flag"
     },
     "sql_identified_by": {
-      "pattern": "(?i)IDENTIFIED\\s+BY\\s+['\\\"]([^'\\\"]{6,})['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])IDENTIFIED\\s+BY\\s+['\\\"]([^'\\\"]{6,})['\\\"]",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "SQL IDENTIFIED BY password"
@@ -262,7 +262,7 @@
       "reason": "Login function password argument"
     },
     "unquoted_env_secret": {
-      "pattern": "(?m)^(?:export\\s+)?[A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|APIKEY|API_KEY)[A-Z_]*\\s*=\\s*([^\\s#'\\\"]{8,})",
+      "pattern": "(?m)^(?:export\\s+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|APIKEY|API_KEY)[A-Z0-9_]*\\s*=\\s*([^\\s#'\\\"]{8,})",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Secret env var (unquoted)"
@@ -280,7 +280,7 @@
       "reason": "Database connection URL with credentials"
     },
     "us_ssn": {
-      "pattern": "\\b(?!000|666|9\\d{2})\\d{3}-(?!00)\\d{2}-(?!0000)\\d{4}\\b",
+      "pattern": "(?<![0-9-])(?!000|666|9\\d{2})\\d{3}-(?!00)\\d{2}-(?!0000)\\d{4}(?![0-9-])",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "US Social Security Number"
@@ -328,19 +328,19 @@
       "reason": "US phone number"
     },
     "git_modifier_user": {
-      "pattern": "(?i)git_(?:last_modified_by|modifiers)\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])git_(?:last_modified_by|modifiers)\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
       "confidence": 0.93,
       "level": "standard",
       "reason": "Git contributor username"
     },
     "git_config_username": {
-      "pattern": "git\\s+config\\s+(?:--\\S+\\s+)*user\\.name\\s+['\\\"]([^'\\\"]+)['\\\"]",
+      "pattern": "(?<![A-Za-z0-9])git\\s+config\\s+(?:--\\S+\\s+)*user\\.name\\s+['\\\"]([^'\\\"]+)['\\\"]",
       "confidence": 0.95,
       "level": "standard",
       "reason": "Git config committer name"
     },
     "git_config_email": {
-      "pattern": "git\\s+config\\s+(?:--\\S+\\s+)*user\\.email\\s+['\\\"]([^'\\\"]+)['\\\"]",
+      "pattern": "(?<![A-Za-z0-9])git\\s+config\\s+(?:--\\S+\\s+)*user\\.email\\s+['\\\"]([^'\\\"]+)['\\\"]",
       "confidence": 0.95,
       "level": "standard",
       "reason": "Git config committer email"
@@ -376,13 +376,13 @@
       "reason": "Server hostname (PRD/STG/DEV prefix)"
     },
     "connstr_password_inline": {
-      "pattern": "(?i)Password\\s*=\\s*([^;\\s'\\\"<>]{6,})\\s*;",
+      "pattern": "(?i)(?<![A-Za-z0-9])Password\\s*=\\s*([^;\\s'\\\"<>]{6,})\\s*;",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "Password in semicolon-delimited connection string"
     },
     "connstr_userid_inline": {
-      "pattern": "(?i)User\\s+ID\\s*=\\s*([^;\\s'\\\"<>]{3,})\\s*;",
+      "pattern": "(?i)(?<![A-Za-z0-9])User\\s+ID\\s*=\\s*([^;\\s'\\\"<>]{3,})\\s*;",
       "confidence": 0.9,
       "level": "standard",
       "reason": "User ID in semicolon-delimited connection string"
@@ -394,31 +394,31 @@
       "reason": "UUID / internal trace ID"
     },
     "git_commit_hash": {
-      "pattern": "(?i)git_commit\\s*=\\s*['\\\"]([0-9a-f]{40})['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])git_commit\\s*=\\s*['\\\"]([0-9a-f]{40})['\\\"]",
       "confidence": 0.95,
       "level": "strict",
       "reason": "Git commit hash"
     },
     "git_org_name": {
-      "pattern": "(?i)git_org\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])git_org\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
       "confidence": 0.9,
       "level": "strict",
       "reason": "Git organization name"
     },
     "git_repo_name": {
-      "pattern": "(?i)git_repo\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])git_repo\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
       "confidence": 0.9,
       "level": "strict",
       "reason": "Git repository name"
     },
     "git_file_path": {
-      "pattern": "(?i)git_file\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])git_file\\s*=\\s*['\\\"]([^'\\\"]{2,})['\\\"]",
       "confidence": 0.9,
       "level": "strict",
       "reason": "Git file path in tag"
     },
     "git_modified_at": {
-      "pattern": "(?i)git_last_modified_at\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",
+      "pattern": "(?i)(?<![A-Za-z0-9])git_last_modified_at\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",
       "confidence": 0.88,
       "level": "strict",
       "reason": "Git last-modified timestamp"
@@ -442,7 +442,7 @@
       "reason": "AWS region (reveals deployment geography)"
     },
     "aws_arn": {
-      "pattern": "arn:aws:[a-z0-9\\-]+:[a-z0-9\\-]*:\\d{12}:[^\\s'\\\"]+",
+      "pattern": "(?<![A-Za-z0-9])arn:aws:[a-z0-9\\-]+:[a-z0-9\\-]*:\\d{12}:[^\\s'\\\"]+",
       "confidence": 0.98,
       "level": "standard",
       "reason": "AWS ARN (contains account ID)"
@@ -496,7 +496,7 @@
       "reason": "Kubernetes namespace name"
     },
     "tf_resource_label": {
-      "pattern": "resource\\s+[\"\\'][a-z][a-z0-9_]+[\"\\']\\s+[\"\\']([a-zA-Z0-9_\\-]{3,})[\"\\']",
+      "pattern": "(?<![A-Za-z0-9])resource\\s+[\"\\'][a-z][a-z0-9_]+[\"\\']\\s+[\"\\']([a-zA-Z0-9_\\-]{3,})[\"\\']",
       "confidence": 0.82,
       "level": "strict",
       "reason": "Terraform resource name label"
@@ -676,7 +676,7 @@
       "reason": "onepassword secret"
     },
     "ms_teams_webhook": {
-      "pattern": "https://[a-z0-9]+\\.webhook\\.office\\.com/webhookb2/[a-z0-9-]+@[a-z0-9-]+/IncomingWebhook/[a-z0-9]+/[a-z0-9-]+",
+      "pattern": "(?<![A-Za-z0-9])https://[a-z0-9]+\\.webhook\\.office\\.com/webhookb2/[a-z0-9-]+@[a-z0-9-]+/IncomingWebhook/[a-z0-9]+/[a-z0-9-]+",
       "confidence": 0.97,
       "level": "standard",
       "reason": "ms teams webhook"
@@ -722,6 +722,24 @@
       "confidence": 0.9,
       "level": "strict",
       "reason": "IMEI device identifier (PII, keyed)"
+    },
+    "facebook_app_id": {
+      "pattern": "(?i)facebook[_-]?app[_-]?id\\W{0,10}?(?<!\\w)(\\d{10,20})(?![\\d\\w])",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "Facebook App ID (labeled)"
+    },
+    "fb_app_scheme": {
+      "pattern": "(?<![A-Za-z0-9])(fb\\d{10,20})(?![\\d\\w])",
+      "confidence": 0.85,
+      "level": "standard",
+      "reason": "Facebook app URL scheme (fb<app-id>)"
+    },
+    "erlang_cookie": {
+      "pattern": "(?i)erlang[_-]?cookie\\s*[:=]\\s*['\"]?([\\w!@#$%^&*+~.\\-]{8,})",
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Erlang distribution cookie (cluster auth secret)"
     }
   },
   "file_type_extra": {
@@ -759,19 +777,19 @@
     },
     "sql": {
       "server_in_connection": {
-        "pattern": "server\\s*=\\s*['\\\"]?([a-zA-Z0-9\\-_.]+)['\\\"]?(?=;|$)",
+        "pattern": "(?<![A-Za-z0-9])server\\s*=\\s*['\\\"]?([a-zA-Z0-9\\-_.]+)['\\\"]?(?=;|$)",
         "confidence": 0.95,
         "level": "standard",
         "reason": "server= in connection string"
       },
       "uid_in_connection": {
-        "pattern": "uid\\s*=\\s*['\\\"]([a-zA-Z0-9_\\-@.]{3,})['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])uid\\s*=\\s*['\\\"]([a-zA-Z0-9_\\-@.]{3,})['\\\"]",
         "confidence": 0.98,
         "level": "standard",
         "reason": "uid= SQL Server syntax"
       },
       "initial_catalog": {
-        "pattern": "Initial Catalog\\s*=\\s*['\\\"]?([a-zA-Z0-9_\\-]+)['\\\"]?",
+        "pattern": "(?<![A-Za-z0-9])Initial Catalog\\s*=\\s*['\\\"]?([a-zA-Z0-9_\\-]+)['\\\"]?",
         "confidence": 0.99,
         "level": "standard",
         "reason": "Initial Catalog (database name)"
@@ -853,19 +871,19 @@
     },
     "env": {
       "any_env_password": {
-        "pattern": "^[A-Z_]*PASSWORD[A-Z_]*\\s*=\\s*(.+)$",
+        "pattern": "^[A-Z0-9_]*PASSWORD[A-Z0-9_]*\\s*=\\s*(.+)$",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "PASSWORD= env var"
       },
       "any_env_secret": {
-        "pattern": "^[A-Z_]*SECRET[A-Z_]*\\s*=\\s*(.{6,})$",
+        "pattern": "^[A-Z0-9_]*SECRET[A-Z0-9_]*\\s*=\\s*(.{6,})$",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "SECRET= env var"
       },
       "any_env_token": {
-        "pattern": "^[A-Z_]*TOKEN[A-Z_]*\\s*=\\s*([a-zA-Z0-9\\-_.]{20,})$",
+        "pattern": "^[A-Z0-9_]*TOKEN[A-Z0-9_]*\\s*=\\s*([a-zA-Z0-9\\-_.]{20,})$",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "TOKEN= env var"
@@ -885,19 +903,19 @@
         "reason": "Hardcoded secret/password variable in Python"
       },
       "py_os_environ_secret": {
-        "pattern": "os\\.environ(?:\\.get)?\\(['\\\"]([A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z_]*)['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])os\\.environ(?:\\.get)?\\(['\\\"]([A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z0-9_]*)['\\\"]",
         "confidence": 0.88,
         "level": "standard",
         "reason": "os.environ access to secret env var name"
       },
       "py_requests_auth": {
-        "pattern": "(?i)auth\\s*=\\s*\\(\\s*['\\\"]([^'\\\"]{3,})['\\\"],\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])auth\\s*=\\s*\\(\\s*['\\\"]([^'\\\"]{3,})['\\\"],\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
         "confidence": 0.92,
         "level": "minimal",
         "reason": "requests auth tuple with credentials"
       },
       "django_secret_key": {
-        "pattern": "SECRET_KEY\\s*=\\s*['\\\"]([^'\\\"]{8,})['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])SECRET_KEY\\s*=\\s*['\\\"]([^'\\\"]{8,})['\\\"]",
         "confidence": 0.99,
         "level": "minimal",
         "reason": "Django SECRET_KEY setting"
@@ -921,55 +939,55 @@
         "reason": "Django DATABASES NAME entry"
       },
       "django_allowed_hosts": {
-        "pattern": "ALLOWED_HOSTS\\s*=\\s*\\[([^\\]]{4,})\\]",
+        "pattern": "(?<![A-Za-z0-9])ALLOWED_HOSTS\\s*=\\s*\\[([^\\]]{4,})\\]",
         "confidence": 0.8,
         "level": "strict",
         "reason": "Django ALLOWED_HOSTS (exposes internal hostnames)"
       },
       "django_email_creds": {
-        "pattern": "(?i)EMAIL_HOST_(?:PASSWORD|USER)\\s*=\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])EMAIL_HOST_(?:PASSWORD|USER)\\s*=\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
         "confidence": 0.96,
         "level": "minimal",
         "reason": "Django email backend credentials"
       },
       "flask_secret_key": {
-        "pattern": "(?i)app\\.(?:secret_key|config\\[[\\'\\\"]SECRET_KEY[\\'\\\"]\\])\\s*=\\s*['\\\"]([^'\\\"]{8,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])app\\.(?:secret_key|config\\[[\\'\\\"]SECRET_KEY[\\'\\\"]\\])\\s*=\\s*['\\\"]([^'\\\"]{8,})['\\\"]",
         "confidence": 0.98,
         "level": "minimal",
         "reason": "Flask app.secret_key or config SECRET_KEY"
       },
       "flask_config_secret": {
-        "pattern": "(?i)app\\.config\\[['\\\"]([A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z_]*)['\\\"]]\\s*=\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])app\\.config\\[['\\\"]([A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z0-9_]*)['\\\"]]\\s*=\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Flask app.config secret value"
       },
       "flask_sqlalchemy_uri": {
-        "pattern": "(?i)SQLALCHEMY_DATABASE_URI\\s*=\\s*['\\\"]([^'\\\"]{10,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])SQLALCHEMY_DATABASE_URI\\s*=\\s*['\\\"]([^'\\\"]{10,})['\\\"]",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "Flask-SQLAlchemy database URI"
       },
       "boto3_hardcoded_key": {
-        "pattern": "aws_access_key_id\\s*=\\s*['\\\"]([A-Z0-9]{16,})['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])aws_access_key_id\\s*=\\s*['\\\"]([A-Z0-9]{16,})['\\\"]",
         "confidence": 0.99,
         "level": "minimal",
         "reason": "boto3 hardcoded AWS access key ID"
       },
       "boto3_hardcoded_secret": {
-        "pattern": "aws_secret_access_key\\s*=\\s*['\\\"]([a-zA-Z0-9/+=]{20,})['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])aws_secret_access_key\\s*=\\s*['\\\"]([a-zA-Z0-9/+=]{20,})['\\\"]",
         "confidence": 0.99,
         "level": "minimal",
         "reason": "boto3 hardcoded AWS secret access key"
       },
       "boto3_hardcoded_token": {
-        "pattern": "aws_session_token\\s*=\\s*['\\\"]([a-zA-Z0-9/+=]{20,})['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])aws_session_token\\s*=\\s*['\\\"]([a-zA-Z0-9/+=]{20,})['\\\"]",
         "confidence": 0.99,
         "level": "minimal",
         "reason": "boto3 hardcoded AWS session token"
       },
       "boto3_region": {
-        "pattern": "region_name\\s*=\\s*['\\\"]([a-z]{2}-[a-z]+-\\d)['\\\"]",
+        "pattern": "(?<![A-Za-z0-9])region_name\\s*=\\s*['\\\"]([a-z]{2}-[a-z]+-\\d)['\\\"]",
         "confidence": 0.88,
         "level": "strict",
         "reason": "boto3 hardcoded AWS region"
@@ -1017,19 +1035,19 @@
         "reason": "Celery result backend URL"
       },
       "redis_url": {
-        "pattern": "redis://[^\\s'\\\"<>]{6,}",
+        "pattern": "(?<![A-Za-z0-9])redis://[^\\s'\\\"<>]{6,}",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "Redis connection URL (may contain password)"
       },
       "amqp_url": {
-        "pattern": "amqps?://[^\\s'\\\"<>]{6,}",
+        "pattern": "(?<![A-Za-z0-9])amqps?://[^\\s'\\\"<>]{6,}",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "AMQP/RabbitMQ URL (may contain credentials)"
       },
       "jwt_secret": {
-        "pattern": "(?i)jwt\\.(?:encode|decode)\\s*\\([^,)]+,\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])jwt\\.(?:encode|decode)\\s*\\([^,)]+,\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "Hardcoded JWT secret in jwt.encode/decode"
@@ -1041,31 +1059,31 @@
         "reason": "JWT secret key variable assignment"
       },
       "oauth2_client_secret": {
-        "pattern": "(?i)client_secret\\s*=\\s*['\\\"]([a-zA-Z0-9\\-_.~]{8,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])client_secret\\s*=\\s*['\\\"]([a-zA-Z0-9\\-_.~]{8,})['\\\"]",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "OAuth2 client_secret hardcoded"
       },
       "oauth2_client_id": {
-        "pattern": "(?i)client_id\\s*=\\s*['\\\"]([a-zA-Z0-9\\-_.]{8,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])client_id\\s*=\\s*['\\\"]([a-zA-Z0-9\\-_.]{8,})['\\\"]",
         "confidence": 0.88,
         "level": "standard",
         "reason": "OAuth2 client_id hardcoded"
       },
       "oauth2_refresh_token": {
-        "pattern": "(?i)refresh_token\\s*=\\s*['\\\"]([a-zA-Z0-9\\-_.]{20,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])refresh_token\\s*=\\s*['\\\"]([a-zA-Z0-9\\-_.]{20,})['\\\"]",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "OAuth2 refresh token hardcoded"
       },
       "subprocess_password_flag": {
-        "pattern": "(?i)subprocess\\.(?:run|call|Popen)\\s*\\(\\s*\\[.*?['\\\"]--?(?:password|passwd|secret|token)['\\\"],\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])subprocess\\.(?:run|call|Popen)\\s*\\(\\s*\\[.*?['\\\"]--?(?:password|passwd|secret|token)['\\\"],\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
         "confidence": 0.94,
         "level": "minimal",
         "reason": "Password/secret passed as CLI flag to subprocess"
       },
       "subprocess_env_secret": {
-        "pattern": "(?i)subprocess\\.(?:run|call|Popen)\\s*\\(.*env\\s*=\\s*\\{[^}]*['\\\"](?:PASSWORD|SECRET|TOKEN|API_KEY)['\\\"]:\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])subprocess\\.(?:run|call|Popen)\\s*\\(.*env\\s*=\\s*\\{[^}]*['\\\"](?:PASSWORD|SECRET|TOKEN|API_KEY)['\\\"]:\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "Secret injected into subprocess env dict"
@@ -1089,13 +1107,13 @@
         "reason": "Azure storage connection string component"
       },
       "azure_client_secret": {
-        "pattern": "(?i)ClientSecretCredential\\s*\\([^)]*['\\\"]([a-zA-Z0-9\\-_.~]{8,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])ClientSecretCredential\\s*\\([^)]*['\\\"]([a-zA-Z0-9\\-_.~]{8,})['\\\"]",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "Azure SDK ClientSecretCredential hardcoded"
       },
       "azure_subscription_id": {
-        "pattern": "(?i)subscription_id\\s*=\\s*['\\\"]([0-9a-f\\-]{36})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])subscription_id\\s*=\\s*['\\\"]([0-9a-f\\-]{36})['\\\"]",
         "confidence": 0.92,
         "level": "strict",
         "reason": "Azure subscription ID"
@@ -1107,13 +1125,13 @@
         "reason": "GCP service account credentials file path"
       },
       "gcp_project_id": {
-        "pattern": "(?i)project(?:_id)?\\s*=\\s*['\\\"]([a-z][a-z0-9\\-]{4,28}[a-z0-9])['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])project(?:_id)?\\s*=\\s*['\\\"]([a-z][a-z0-9\\-]{4,28}[a-z0-9])['\\\"]",
         "confidence": 0.8,
         "level": "strict",
         "reason": "GCP project ID"
       },
       "configparser_set_secret": {
-        "pattern": "(?i)config\\.set\\s*\\([^,]+,\\s*['\\\"][^'\\\"]*(?:password|secret|token|key)[^'\\\"]*['\\\"],\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
+        "pattern": "(?i)(?<![A-Za-z0-9])config\\.set\\s*\\([^,]+,\\s*['\\\"][^'\\\"]*(?:password|secret|token|key)[^'\\\"]*['\\\"],\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "configparser.set() with secret value"
@@ -1213,19 +1231,19 @@
         "reason": "Terraform token field"
       },
       "tf_bucket": {
-        "pattern": "(?i)bucket\\s*=\\s*[\"\\']([a-z0-9][a-z0-9\\-.]{2,61}[a-z0-9])[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])bucket\\s*=\\s*[\"\\']([a-z0-9][a-z0-9\\-.]{2,61}[a-z0-9])[\"\\']",
         "confidence": 0.88,
         "level": "strict",
         "reason": "Terraform S3 bucket name"
       },
       "tf_region": {
-        "pattern": "(?i)region\\s*=\\s*[\"\\']([a-z]{2}-[a-z]+-\\d)[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])region\\s*=\\s*[\"\\']([a-z]{2}-[a-z]+-\\d)[\"\\']",
         "confidence": 0.9,
         "level": "strict",
         "reason": "Terraform cloud region"
       },
       "tf_account_id": {
-        "pattern": "(?i)account_id\\s*=\\s*[\"\\'](\\d{12})[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])account_id\\s*=\\s*[\"\\'](\\d{12})[\"\\']",
         "confidence": 0.97,
         "level": "strict",
         "reason": "Terraform AWS account ID"
@@ -1237,7 +1255,7 @@
         "reason": "Terraform private IP assignment"
       },
       "tf_password_default": {
-        "pattern": "(?i)default\\s*=\\s*[\"\\']([^\"\\']{6,})[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])default\\s*=\\s*[\"\\']([^\"\\']{6,})[\"\\']",
         "confidence": 0.8,
         "level": "minimal",
         "reason": "Terraform variable default value (potential secret)"
@@ -1319,13 +1337,13 @@
         "reason": "Encryption/machine key in XML"
       },
       "xml_connstr_password": {
-        "pattern": "(?i)Password\\s*=\\s*([^;\"\\'<>\\s]{4,})\\s*;",
+        "pattern": "(?i)(?<![A-Za-z0-9])Password\\s*=\\s*([^;\"\\'<>\\s]{4,})\\s*;",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "Password in semicolon-delimited connection string"
       },
       "xml_connstr_userid": {
-        "pattern": "(?i)User\\s+ID\\s*=\\s*([^;\"\\'<>\\s]{3,})\\s*;",
+        "pattern": "(?i)(?<![A-Za-z0-9])User\\s+ID\\s*=\\s*([^;\"\\'<>\\s]{3,})\\s*;",
         "confidence": 0.9,
         "level": "standard",
         "reason": "User ID in semicolon-delimited connection string"
@@ -1339,7 +1357,7 @@
         "reason": "Hardcoded secret/password variable in JS/TS"
       },
       "js_process_env_secret": {
-        "pattern": "process\\.env(?:\\[|\\.)([A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z_]*)",
+        "pattern": "(?<![A-Za-z0-9])process\\.env(?:\\[|\\.)([A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z0-9_]*)",
         "confidence": 0.88,
         "level": "standard",
         "reason": "process.env access to secret variable name"
@@ -1383,13 +1401,13 @@
         "reason": "Hardcoded secret/password in C#"
       },
       "cs_config_manager": {
-        "pattern": "ConfigurationManager\\.(?:AppSettings|ConnectionStrings)\\[[\"\\']([^\"\\']+)[\"\\']\\]",
+        "pattern": "(?<![A-Za-z0-9])ConfigurationManager\\.(?:AppSettings|ConnectionStrings)\\[[\"\\']([^\"\\']+)[\"\\']\\]",
         "confidence": 0.85,
         "level": "standard",
         "reason": "ConfigurationManager key lookup in C#"
       },
       "cs_smtp_credentials": {
-        "pattern": "(?i)new\\s+NetworkCredential\\s*\\(\\s*[\"\\']([^\"\\']+)[\"\\']\\s*,\\s*[\"\\']([^\"\\']+)[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])new\\s+NetworkCredential\\s*\\(\\s*[\"\\']([^\"\\']+)[\"\\']\\s*,\\s*[\"\\']([^\"\\']+)[\"\\']",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "SMTP/network credentials hardcoded in C#"
@@ -1409,7 +1427,7 @@
         "reason": "Hardcoded secret/password in Java"
       },
       "java_jdbc_url": {
-        "pattern": "jdbc:[a-z]+://([^\\s\"\\']{8,})",
+        "pattern": "(?<![A-Za-z0-9])jdbc:[a-z]+://([^\\s\"\\']{8,})",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "JDBC connection URL in Java"
@@ -1421,7 +1439,7 @@
         "reason": "Password in Java .properties file"
       },
       "java_spring_datasource": {
-        "pattern": "(?i)spring\\.datasource\\.(?:password|username|url)\\s*=\\s*(.+)",
+        "pattern": "(?i)(?<![A-Za-z0-9])spring\\.datasource\\.(?:password|username|url)\\s*=\\s*(.+)",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Spring datasource credential in properties"
@@ -1441,13 +1459,13 @@
         "reason": "Hardcoded secret/password in Go"
       },
       "go_db_open": {
-        "pattern": "sql\\.Open\\s*\\(\\s*[\"\\'][^\"\\']+[\"\\']\\s*,\\s*[\"\\']([^\"\\']{10,})[\"\\']",
+        "pattern": "(?<![A-Za-z0-9])sql\\.Open\\s*\\(\\s*[\"\\'][^\"\\']+[\"\\']\\s*,\\s*[\"\\']([^\"\\']{10,})[\"\\']",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "sql.Open() connection string in Go"
       },
       "go_os_getenv_secret": {
-        "pattern": "os\\.Getenv\\s*\\(\\s*[\"\\']([A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z_]*)[\"\\']",
+        "pattern": "(?<![A-Za-z0-9])os\\.Getenv\\s*\\(\\s*[\"\\']([A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z0-9_]*)[\"\\']",
         "confidence": 0.87,
         "level": "standard",
         "reason": "os.Getenv access to secret variable name in Go"
@@ -1467,13 +1485,13 @@
     },
     "dockerfile": {
       "dockerfile_env_secret": {
-        "pattern": "(?i)^(?:ENV|ARG)\\s+[A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z_]*[=\\s]+([^\\s#]{6,})",
+        "pattern": "(?i)^(?:ENV|ARG)\\s+[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z0-9_]*[=\\s]+([^\\s#]{6,})",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Secret baked into Dockerfile ENV/ARG"
       },
       "dockerfile_run_password": {
-        "pattern": "(?i)RUN\\s+.*(?:password|passwd|secret|token)\\s*[=:]\\s*([^\\s\\\\&|;]{6,})",
+        "pattern": "(?i)(?<![A-Za-z0-9])RUN\\s+.*(?:password|passwd|secret|token)\\s*[=:]\\s*([^\\s\\\\&|;]{6,})",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "Secret passed to RUN command in Dockerfile"
@@ -1485,13 +1503,13 @@
         "reason": "Internal registry image in FROM instruction"
       },
       "dockerfile_label_secret": {
-        "pattern": "(?i)LABEL\\s+[^=]*(?:secret|token|password|key)\\s*=\\s*[\"\\']?([^\\s\"\\']{6,})[\"\\']?",
+        "pattern": "(?i)(?<![A-Za-z0-9])LABEL\\s+[^=]*(?:secret|token|password|key)\\s*=\\s*[\"\\']?([^\\s\"\\']{6,})[\"\\']?",
         "confidence": 0.9,
         "level": "minimal",
         "reason": "Secret value in Dockerfile LABEL"
       },
       "dockerfile_internal_host": {
-        "pattern": "(?i)(?:ENV|ARG)\\s+[A-Z_]*(?:HOST|SERVER|ENDPOINT|URL)[A-Z_]*[=\\s]+([a-zA-Z0-9\\-_.]{6,})",
+        "pattern": "(?i)(?:ENV|ARG)\\s+[A-Z0-9_]*(?:HOST|SERVER|ENDPOINT|URL)[A-Z0-9_]*[=\\s]+([a-zA-Z0-9\\-_.]{6,})",
         "confidence": 0.83,
         "level": "standard",
         "reason": "Internal host/server baked into Dockerfile"
@@ -1517,7 +1535,7 @@
         "reason": "API key in Gradle build file"
       },
       "gradle_manifest_placeholder": {
-        "pattern": "(?i)manifestPlaceholders\\s*[=:]\\s*\\[[^\\]]*[\"\\']([A-Za-z0-9\\-_]{20,})[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])manifestPlaceholders\\s*[=:]\\s*\\[[^\\]]*[\"\\']([A-Za-z0-9\\-_]{20,})[\"\\']",
         "confidence": 0.9,
         "level": "minimal",
         "reason": "Secret in Gradle manifestPlaceholders"
@@ -1529,7 +1547,7 @@
         "reason": "Password/secret in Gradle build"
       },
       "gradle_buildconfig": {
-        "pattern": "(?i)buildConfigField\\s+[\"\\']String[\"\\']\\s*,\\s*[\"\\'][^\"\\']*(?:KEY|SECRET|TOKEN|PASSWORD)[^\"\\']*[\"\\']\\s*,\\s*[\"\\']\\\\?\"([^\"\\'\\\\]{6,})\\\\?\"[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])buildConfigField\\s+[\"\\']String[\"\\']\\s*,\\s*[\"\\'][^\"\\']*(?:KEY|SECRET|TOKEN|PASSWORD)[^\"\\']*[\"\\']\\s*,\\s*[\"\\']\\\\?\"([^\"\\'\\\\]{6,})\\\\?\"[\"\\']",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Secret in Gradle buildConfigField"
@@ -1569,7 +1587,7 @@
     },
     "ruby": {
       "ruby_env_secret": {
-        "pattern": "(?i)ENV\\[[\\\"\\']([A-Z_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z_]*)[\\\"\\']\\]\\s*=\\s*[\"\\']([^\"\\']{6,})[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])ENV\\[[\\\"\\']([A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|API_KEY)[A-Z0-9_]*)[\\\"\\']\\]\\s*=\\s*[\"\\']([^\"\\']{6,})[\"\\']",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Secret assigned via ENV[] in Ruby/Fastfile"
@@ -1613,13 +1631,13 @@
         "reason": "Host in .properties file"
       },
       "spring_datasource": {
-        "pattern": "(?i)spring\\.datasource\\.(?:password|username|url)\\s*=\\s*(.+)$",
+        "pattern": "(?i)(?<![A-Za-z0-9])spring\\.datasource\\.(?:password|username|url)\\s*=\\s*(.+)$",
         "confidence": 0.97,
         "level": "minimal",
         "reason": "Spring datasource config"
       },
       "spring_secret": {
-        "pattern": "(?i)spring\\.[\\w.]*(?:password|secret|key|token|credentials?)\\s*=\\s*([^\\s#]{6,})$",
+        "pattern": "(?i)(?<![A-Za-z0-9])spring\\.[\\w.]*(?:password|secret|key|token|credentials?)\\s*=\\s*([^\\s#]{6,})$",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Spring property secret"
@@ -1663,7 +1681,7 @@
         "reason": "Database name mentioned in prose"
       },
       "prose_internal_url": {
-        "pattern": "https?://(?:[a-zA-Z0-9\\-_.]*(?:internal|intranet|corp\\.|staging\\.|vpn\\.|localhost)[a-zA-Z0-9\\-_.]*|(?:\\d{1,3}\\.){3}\\d{1,3}|[a-zA-Z0-9\\-_.]+\\.(?:local|internal|corp|lan|intra)(?![a-zA-Z]))(?::\\d+)?(?:/[^\\s\\\"'<>)]*)?",
+        "pattern": "(?<![A-Za-z0-9])https?://(?:[a-zA-Z0-9\\-_.]*(?:internal|intranet|corp\\.|staging\\.|vpn\\.|localhost)[a-zA-Z0-9\\-_.]*|(?:\\d{1,3}\\.){3}\\d{1,3}|[a-zA-Z0-9\\-_.]+\\.(?:local|internal|corp|lan|intra)(?![a-zA-Z]))(?::\\d+)?(?:/[^\\s\\\"'<>)]*)?",
         "confidence": 0.8,
         "level": "standard",
         "reason": "Internal URL in free text"
@@ -1681,7 +1699,7 @@
         "reason": "Database connection URL in prose"
       },
       "prose_aws_key": {
-        "pattern": "AKIA[0-9A-Z]{16}",
+        "pattern": "(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}",
         "confidence": 0.99,
         "level": "minimal",
         "reason": "AWS access key in prose"
@@ -1711,19 +1729,19 @@
         "reason": "AWS Account ID in prose"
       },
       "prose_aws_arn": {
-        "pattern": "arn:aws:[a-z0-9\\-]+:[a-z0-9\\-]*:\\d{12}:[^\\s\"\\'<>]+",
+        "pattern": "(?<![A-Za-z0-9])arn:aws:[a-z0-9\\-]+:[a-z0-9\\-]*:\\d{12}:[^\\s\"\\'<>]+",
         "confidence": 0.95,
         "level": "standard",
         "reason": "AWS ARN in prose"
       },
       "prose_s3_bucket": {
-        "pattern": "(?i)\\b([a-z][a-z0-9]*(?:-[a-z0-9]+)+-\\d{6,})\\b",
+        "pattern": "(?i)(?<![\\w.-])([a-z][a-z0-9]*(?:-[a-z0-9]+)+-\\d{6,})(?![\\w-])",
         "confidence": 0.82,
         "level": "standard",
         "reason": "S3 bucket name (with account suffix) in prose"
       },
       "prose_s3_uri": {
-        "pattern": "s3://[a-z0-9][a-z0-9\\-./]{3,}",
+        "pattern": "(?<![A-Za-z0-9])s3://[a-z0-9][a-z0-9\\-./]{3,}",
         "confidence": 0.95,
         "level": "standard",
         "reason": "S3 URI in prose"
@@ -1791,13 +1809,13 @@
         "reason": "Space-delimited secret in conf (Spark/Hadoop style)"
       },
       "ini_jaas_password": {
-        "pattern": "(?i)password\\s*=\\s*[\"\\']([^\"\\']{6,})[\"\\']",
+        "pattern": "(?i)(?<![A-Za-z0-9])password\\s*=\\s*[\"\\']([^\"\\']{6,})[\"\\']",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "Password in JAAS/inline config"
       },
       "ini_connection_password": {
-        "pattern": "(?i)Connection(?:Password|Secret)\\s+([^\\s#]{6,})",
+        "pattern": "(?i)(?<![A-Za-z0-9])Connection(?:Password|Secret)\\s+([^\\s#]{6,})",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "ConnectionPassword in space-delimited conf"
@@ -1878,5 +1896,148 @@
     "docker.io",
     "readthedocs.io",
     "wikipedia.org"
-  ]
+  ],
+  "lang_packs": {
+    "_comment": "Language packs — PII/secret patterns keyed by non-English keywords (Hebrew, Russian, Arabic, Spanish, French). Loaded into the universal set by regex_rules_safe.py; select with LOCALMASK_LANGS=he,ru (default: all, 'none' disables). Adding a language = adding a block here, no code changes. israeli_id and spanish_dni are checksum-validated in engine.py.",
+    "he": {
+      "israeli_id": {
+        "pattern": "(?:תעודת[\\s-]?זהות|מספר[\\s-]?זהות|ת\\s?[\"״']\\s?ז|ת\\.\\s?ז\\.?|\\bתז\\b|israeli[_\\s.-]?id|teudat[_\\s.-]?zehut)\\D{0,20}?(?<!\\w)(\\d{7,9})(?![\\d\\w])",
+        "confidence": 0.93,
+        "level": "minimal",
+        "reason": "Israeli ID number (Teudat Zehut, checksum-validated PII)"
+      },
+      "israeli_phone": {
+        "pattern": "(?<![\\d\\w])(?:\\+972[\\s-]?(?:5\\d|[23489])|05\\d|0[23489](?=[\\s-]))[\\s-]?\\d{3}[\\s-]?\\d{4}(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "Israeli phone number (PII)"
+      },
+      "hebrew_password": {
+        "pattern": "(?:סיסמה|סיסמא|הסיסמה|סיסמת\\s+[֐-׿]+)\\s*(?:היא\\s+|[:=]\\s*)['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in Hebrew"
+      },
+      "hebrew_address": {
+        "pattern": "(?:רחוב|רח['׳]?\\.?|שדרות|שד['׳]?\\.?)\\s+[֐-׿]{2,}(?:\\s+[֐-׿]{2,}){0,2}\\s+\\d{1,4}\\b",
+        "confidence": 0.8,
+        "level": "standard",
+        "reason": "Israeli street address (PII)"
+      },
+      "hebrew_name": {
+        "pattern": "שם\\s+(?:מלא|פרטי|משפחה|לקוח|הלקוח|עובד|העובד|משתמש|המשתמש)\\s*[:=\\-]\\s*([֐-׿]{2,}(?:\\s+[֐-׿]{2,}){0,2})",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "Person name labeled in Hebrew (PII)"
+      }
+    },
+    "ru": {
+      "russian_password": {
+        "pattern": "парол[ья]\\s*(?:[:=]\\s*|это\\s+)['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in Russian"
+      },
+      "russian_phone": {
+        "pattern": "(?<![\\d\\w])(?:\\+7[\\s-]?\\(?\\d{3}\\)?[\\s-]?\\d{3}[\\s-]?\\d{2}[\\s-]?\\d{2}|8[\\s-]\\(?\\d{3}\\)?[\\s-]?\\d{3}[\\s-]?\\d{2}[\\s-]?\\d{2}|8\\(\\d{3}\\)[\\s-]?\\d{3}[\\s-]?\\d{2}[\\s-]?\\d{2})(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "Russian phone number (PII)"
+      },
+      "russian_passport": {
+        "pattern": "(?:паспорт\\w*|серия\\s+и\\s+номер)\\D{0,15}?(?<!\\w)(\\d{4}[\\s-]?\\d{6})(?![\\d\\w])",
+        "confidence": 0.88,
+        "level": "standard",
+        "reason": "Russian passport series+number labeled (PII)"
+      }
+    },
+    "ar": {
+      "arabic_password": {
+        "pattern": "كلمة\\s+(?:المرور|السر)\\s*[:=]?\\s*['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in Arabic"
+      },
+      "arabic_phone": {
+        "pattern": "(?:هاتف|جوال|موبايل|رقم\\s+الهاتف)\\D{0,10}?(?<![\\w+])(\\+?\\d(?:[\\s-]?\\d){8,13})(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "Phone number labeled in Arabic (PII)"
+      },
+      "arabic_national_id": {
+        "pattern": "(?:رقم\\s+الهوية|الرقم\\s+القومي|هوية\\s+وطنية)\\D{0,12}?(?<!\\w)(\\d{10,14})(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "National ID labeled in Arabic (PII)"
+      }
+    },
+    "es": {
+      "spanish_dni": {
+        "pattern": "\\b(?:DNI|NIE)\\b\\s*(?:n[º°o]?\\.?\\s*)?[:=\\-]?\\s*(?<![\\d\\w])(\\d{8}\\s?-?\\s?[A-Za-z])\\b",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Spanish DNI/NIE (control-letter-validated PII)"
+      },
+      "spanish_password": {
+        "pattern": "(?:contraseña|clave\\s+secreta)\\s*[:=]?\\s*['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in Spanish"
+      }
+    },
+    "fr": {
+      "french_password": {
+        "pattern": "mot\\s+de\\s+passe\\s*(?:est\\s+|[:=]\\s*)['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in French"
+      },
+      "french_phone": {
+        "pattern": "(?<![\\d\\w])(?:\\+33[\\s.-]?[1-9](?:[\\s.-]?\\d{2}){4}|0[1-9](?:(?:\\s\\d{2}){4}|(?:\\.\\d{2}){4}|(?:-\\d{2}){4}))(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "French phone number (PII)"
+      }
+    },
+    "de": {
+      "german_password": {
+        "pattern": "(?:passwort|kennwort)\\s*(?:ist\\s+|lautet\\s+|[:=]\\s*)['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in German"
+      },
+      "german_phone": {
+        "pattern": "(?<![\\d\\w])(?:\\+49[\\s.-]?\\d{2,4}[\\s.-]?\\d{6,8}|0[1-9]\\d{1,3}[\\s/]\\d{6,8})(?![\\d\\w])",
+        "confidence": 0.82,
+        "level": "standard",
+        "reason": "German phone number (PII)"
+      },
+      "german_tax_id": {
+        "pattern": "(?:steuer[\\s-]?id|steuernummer|sozialversicherungsnummer)\\D{0,12}?(?<!\\w)(\\d[\\d\\s/]{8,13}\\d)(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "German tax/social-insurance number labeled (PII)"
+      }
+    },
+    "it": {
+      "italian_password": {
+        "pattern": "(?:la\\s+password\\s+è|parola\\s+d'ordine\\s*[:=]?)\\s*['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in Italian"
+      },
+      "italian_fiscal_code": {
+        "pattern": "(?:codice\\s+fiscale|cod\\.?\\s*fisc\\.?)\\D{0,25}?([A-Za-z]{6}\\d{2}[A-Za-z]\\d{2}[A-Za-z]\\d{3}[A-Za-z])(?![\\w])",
+        "confidence": 0.92,
+        "level": "minimal",
+        "reason": "Italian codice fiscale (structured national ID, PII)"
+      },
+      "italian_phone": {
+        "pattern": "(?<![\\d\\w])\\+39[\\s.-]?3\\d{2}[\\s.-]?\\d{6,7}(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "Italian mobile number (PII)"
+      }
+    }
+  }
 }

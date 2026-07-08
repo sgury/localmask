@@ -31,6 +31,8 @@ _CAP_MIN_EDITION = {
     "ask_ai":         "pro",    # cloud Q&A over masked repo (only egress)
     "ai_proxy":       "pro",    # prompt-firewall proxy (BYO AI, masked egress)
     "review_edit":    "free",   # manually edit detections: mask / allow / teach
+    "finance_relative": "free", # Finance Mode: relative ratios (the OSS hook)
+    "finance_modes":  "pro",    # Finance Mode: token/bucket opacity choice
     "org_rules":      "team",   # shared team rules server
     "shared_vault":   "team",   # team-wide Redis token vault (consistent tokens)
     "ldap_auth":      "ent",    # LDAP/AD auth + group→tier mapping

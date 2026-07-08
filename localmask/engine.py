@@ -7,6 +7,7 @@ from regex_rules_safe import RegexRulesSafe
 
 from .gitops import _git_tracked_files
 from .masking import _make_token, _context_aware_replace
+from .money import money_mode, scan_money, money_token
 
 
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".tox"}
@@ -279,6 +280,30 @@ def _luhn_ok(value: str) -> bool:
     return total % 10 == 0
 
 
+def _israeli_id_ok(value: str) -> bool:
+    """Israeli ID (Teudat Zehut) check digit: weights 1,2 alternating over the
+    9-digit number (left-padded — IDs are often written without leading
+    zeros), digit-sum of products divisible by 10."""
+    digits = re.sub(r"\D", "", value)
+    if not (5 <= len(digits) <= 9):
+        return False
+    digits = digits.zfill(9)
+    total = 0
+    for i, ch in enumerate(digits):
+        n = int(ch) * (2 if i % 2 else 1)
+        total += n - 9 if n > 9 else n
+    return total % 10 == 0
+
+
+_DNI_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
+
+
+def _dni_ok(value: str) -> bool:
+    """Spanish DNI control letter: letter == TRWAGMYFPDXBNJZSQVHLCKE[n % 23]."""
+    m = re.search(r"(\d{8})\s?-?\s?([A-Za-z])", value)
+    return bool(m) and _DNI_LETTERS[int(m.group(1)) % 23] == m.group(2).upper()
+
+
 # Special characters that appear in generated passwords/keys but not in code
 # identifiers, versions, datetimes, or dtype strings. Separators (- _ . / :)
 # and '=' are deliberately excluded — '=' is an assignment operator and
@@ -539,7 +564,10 @@ _B64_RUN = re.compile(r"(?<![A-Za-z0-9+/=_-])([A-Za-z0-9+/_-]{24,1024}={0,2})"
 # regex hit of its own but the variable clearly holds a credential).
 _B64_SECRET_CTX = re.compile(
     r"(?i)(secret|password|passwd|api[_-]?key|auth[_-]?token|access[_-]?token"
-    r"|credential|private[_-]?key|encryption|signing[_-]?key|\.pem)")
+    r"|credential|private[_-]?key|encryption|signing[_-]?key|\.pem"
+    # any *-key/*_key field right before the blob (stripe-key:, fcm_key=…) —
+    # config fields named *key holding decodable base64 are credentials
+    r"|[a-z0-9]+[-_]key\s*[:=])")
 
 
 def _scan_base64_secrets(content: str, file_ext: str,
@@ -800,6 +828,12 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
     # dedup merges any overlap.
     raw_detections.extend(_scan_base64_secrets(content, file_ext, already_found))
 
+    # ── Layer 3c: Finance Mode — money amounts (opt-in, off by default) ───
+    # Currency/keyword-anchored only; replacement style (token / magnitude
+    # bucket / ratio-to-secret-base) is decided at mask time in money_token.
+    if money_mode() != "off":
+        raw_detections.extend(scan_money(content, file_ext))
+
     # ── Layer 4: LLM gate — ask Ollama about ambiguous detections ────────
     # Obviously-sensitive types (credentials, keys, passwords, connections)
     # skip the LLM to save time. Only ambiguous ones (NER names, hostnames,
@@ -1019,6 +1053,12 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         dtype = d.get("type", "")
         if dtype in ("credit_card", "credit_card_grouped") and not _luhn_ok(v):
             continue
+        # Checksum-validated national IDs (lang packs): a keyword-adjacent
+        # number that fails the check digit is an order id / random number.
+        if dtype == "israeli_id" and not _israeli_id_ok(v):
+            continue
+        if dtype == "spanish_dni" and not _dni_ok(v):
+            continue
         if dtype in ("password_assignment", "declare_password", "any_env_password"):
             if _is_word_like(v):
                 continue
@@ -1043,9 +1083,13 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
     masked = content
     findings = []
     for value, det in sorted(seen.items(), key=lambda kv: -len(kv[0])):
-        subtype = _semantic_subtype(det.get("type", "SECRET"), value,
-                                    det.get("context", ""))
-        token = _make_token(session, value, subtype)
+        if det.get("type") == "money_amount":
+            subtype = "money_amount"
+            token = money_token(session, value, det)
+        else:
+            subtype = _semantic_subtype(det.get("type", "SECRET"), value,
+                                        det.get("context", ""))
+            token = _make_token(session, value, subtype)
         # Patterns flagged mask_mode=direct in regex_patterns.json (dotted
         # vendor tokens like hvs.<...> / SG.<...>.<...>) are wrongly protected
         # by the key-position guard in _context_aware_replace, which silently
@@ -1057,7 +1101,11 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # They're verified secrets — mask directly, like DIRECT_MASK patterns.
         if det.get("type", "") in RegexRulesSafe.DIRECT_MASK \
                 or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key"):
-            masked = masked.replace(value, token)
+            # Direct mask skips the key-position guard but still must respect
+            # token boundaries — replacing the value inside a longer blob
+            # (hex/base64 that happens to contain it) corrupts the blob.
+            masked = re.sub(r"(?<![.\w])" + re.escape(value) + r"(?![.\w])",
+                            token, masked)
         else:
             masked = _context_aware_replace(masked, value, token)
         base_engine = _engine_label(det.get("pattern_reason", ""))
@@ -1087,9 +1135,18 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         if f["token"] in masked:
             kept_findings.append(f)
         else:
-            # Clean up vault — this value was never actually masked
-            session["vault"].pop(f["value"], None)
-            session["rev_vault"].pop(f["token"], None)
+            # Clean up vault — this value was never actually masked. But the
+            # vault is session-global: if another file's findings still use
+            # this token, popping here orphans them and they surface later
+            # with value='' (rev_vault miss). Only pop when nobody else
+            # references the token.
+            used_elsewhere = any(
+                ff.get("token") == f["token"]
+                for fd in session.get("files", {}).values()
+                for ff in fd.get("findings", []))
+            if not used_elsewhere:
+                session["vault"].pop(f["value"], None)
+                session["rev_vault"].pop(f["token"], None)
     findings = kept_findings
 
     status = "PENDING_REVIEW" if findings else "OK"

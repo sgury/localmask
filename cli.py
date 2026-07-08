@@ -1205,6 +1205,8 @@ Git Integration:
 
 All scanning happens server-side. The CLI never has access to secret values.
 The AI only sees masked content — real secrets are replaced with tokens.
+
+Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
         """,
     )
     sub = parser.add_subparsers(dest="command")
@@ -1345,6 +1347,17 @@ The AI only sees masked content — real secrets are replaced with tokens.
     # license
     sub.add_parser("license", help="Show current license tier and usage")
 
+    # feedback — works offline, no init/server needed
+    fb_p = sub.add_parser("feedback",
+                          help="Send feedback or report a bug (feedback@localmaskpro.com)")
+    fb_p.add_argument("--no-open", action="store_true",
+                      help="Only print the address, don't open the mail app")
+
+    # finance — explain Finance Mode (offline)
+    sub.add_parser("finance",
+                   help="Explain Finance Mode: masking money amounts "
+                        "(LOCALMASK_MONEY_MODE=token|bucket|relative)")
+
     # sync
     sync_p = sub.add_parser("sync", help="Re-scan repo after git updates, preserve tokens & decisions")
     sync_p.add_argument("scan_id", help="Scan ID of a previously scanned repo")
@@ -1407,6 +1420,36 @@ The AI only sees masked content — real secrets are replaced with tokens.
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
+    if args.command == "finance":
+        print("""Finance Mode — your real figures never leave this machine.
+
+Enable per scan:   LOCALMASK_MONEY_MODE=<mode> localmask scan .
+
+  relative   42,000 ILS -> (0.42*R_SALARY)       (AI can compare & compute) [FREE]
+  bucket     42,000 ILS -> ~[AMOUNT_5D_ILS_0]~   (order of magnitude only)  [PRO]
+  token      42,000 ILS -> ~[AMOUNT_0]~          (full opacity)             [PRO]
+
+'relative' sends each amount as a ratio to a secret crypto-random base,
+one base per category (salary/revenue/price), generated locally and stored
+with 0600 permissions in ~/.localmask/money_keys.json. Absolute values,
+currency and scale are hidden; only in-category ratios are visible - that
+is the utility. AI answers are re-hydrated back to real numbers locally.
+
+The protection level is one uniform choice per scan: in relative mode
+everything is relative (uncategorized amounts use the generic R_AMOUNT
+base); for full opacity choose token or bucket for the whole scan.
+Full details: FINANCE.md""")
+        return
+
+    if args.command == "feedback":
+        addr = "feedback@localmaskpro.com"
+        print("Feedback, bugs, feature requests — we read everything:")
+        print(f"  {addr}")
+        if not getattr(args, "no_open", False):
+            import webbrowser
+            webbrowser.open(f"mailto:{addr}?subject=LocalMask%20feedback")
+        return
 
     if args.command == "proxy":
         if args.port:

@@ -15,7 +15,7 @@ import platform
 import secrets
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
@@ -48,6 +48,13 @@ TIERS = {
         "custom_rules": True,
         "max_concurrent": 5,
     },
+    "team": {
+        "name": "Team",
+        "scans_per_month": -1,
+        "asks_per_month": -1,
+        "custom_rules": True,
+        "max_concurrent": 20,
+    },
     "ent": {
         "name": "Enterprise",
         "scans_per_month": -1,
@@ -66,42 +73,68 @@ ACTION_LIMITS = {
 
 # ── Key Generation (for admin/testing) ───────────────────────────────────────
 
-def generate_license_key(tier: str = "pro") -> str:
-    """Generate a valid license key for a given tier."""
+GRACE_DAYS = 7  # tier stays active this long past expiry before dropping to free
+
+
+def generate_license_key(tier: str = "pro", years: int = 1) -> str:
+    """Generate a license key.
+
+    years > 0  → annual key that embeds an expiry date (the org buys a yearly
+                 license; no monthly re-activation). Format:
+                 LM-{TIER}-{random32}-{expYYYYMMDD}-{checksum}
+    years <= 0 → perpetual key (legacy 4-part form), used for internal/testing.
+    """
     if tier not in TIERS:
         raise ValueError(f"Unknown tier: {tier}. Use: {list(TIERS.keys())}")
     random_part = secrets.token_hex(16)
+    if years and years > 0:
+        exp = (datetime.now(timezone.utc) + timedelta(days=365 * years)).strftime("%Y%m%d")
+        checksum = _compute_checksum(tier, random_part, exp)
+        return f"LM-{tier.upper()}-{random_part}-{exp}-{checksum}"
     checksum = _compute_checksum(tier, random_part)
     return f"LM-{tier.upper()}-{random_part}-{checksum}"
 
 
-def _compute_checksum(tier: str, random_part: str) -> str:
-    """HMAC-SHA256 checksum (first 4 hex chars)."""
-    payload = f"{tier.lower()}{random_part}".encode()
+def _compute_checksum(tier: str, random_part: str, exp: str = "") -> str:
+    """HMAC-SHA256 checksum (first 4 hex chars). Expiry is signed too, so it
+    can't be tampered with offline."""
+    payload = f"{tier.lower()}{random_part}{exp}".encode()
     mac = hmac.new(_SIGNING_SECRET, payload, hashlib.sha256).hexdigest()
     return mac[:4]
 
 
 def _validate_key_format(key: str) -> tuple:
-    """Validate license key format. Returns (valid, tier, error)."""
+    """Validate license key format.
+    Returns (valid, tier, error, expires_at) — expires_at is an ISO date
+    string ('' = perpetual)."""
     parts = key.split("-")
-    if len(parts) != 4 or parts[0] != "LM":
-        return False, "", "Invalid key format"
+    if len(parts) not in (4, 5) or parts[0] != "LM":
+        return False, "", "Invalid key format", ""
 
     tier = parts[1].lower()
     random_part = parts[2]
-    provided_checksum = parts[3]
-
     if tier not in TIERS:
-        return False, "", f"Unknown tier: {tier}"
+        return False, "", f"Unknown tier: {tier}", ""
     if len(random_part) != 32:
-        return False, "", "Invalid key length"
+        return False, "", "Invalid key length", ""
 
+    if len(parts) == 5:  # annual key with embedded expiry
+        exp, provided_checksum = parts[3], parts[4]
+        expected = _compute_checksum(tier, random_part, exp)
+        if not hmac.compare_digest(provided_checksum, expected):
+            return False, "", "Invalid checksum", ""
+        try:
+            exp_iso = datetime.strptime(exp, "%Y%m%d").replace(
+                tzinfo=timezone.utc).isoformat()
+        except ValueError:
+            return False, "", "Invalid expiry", ""
+        return True, tier, "", exp_iso
+
+    provided_checksum = parts[3]  # perpetual key
     expected = _compute_checksum(tier, random_part)
     if not hmac.compare_digest(provided_checksum, expected):
-        return False, "", "Invalid checksum"
-
-    return True, tier, ""
+        return False, "", "Invalid checksum", ""
+    return True, tier, "", ""
 
 
 def _machine_id() -> str:
@@ -122,8 +155,32 @@ class LicenseManager:
 
     @property
     def tier(self) -> str:
-        """Current tier name."""
-        return self._license.get("tier", "free")
+        """Current tier name. An expired annual license falls back to free
+        (offline check, with a short grace window)."""
+        tier = self._license.get("tier", "free")
+        if tier != "free" and self._is_expired():
+            return "free"
+        return tier
+
+    def _is_expired(self) -> bool:
+        exp = self._license.get("expires_at", "")
+        if not exp:
+            return False  # perpetual
+        try:
+            exp_dt = datetime.fromisoformat(exp)
+        except ValueError:
+            return False
+        return datetime.now(timezone.utc) > (exp_dt + timedelta(days=GRACE_DAYS))
+
+    def days_remaining(self):
+        exp = self._license.get("expires_at", "")
+        if not exp:
+            return None  # perpetual
+        try:
+            exp_dt = datetime.fromisoformat(exp)
+        except ValueError:
+            return None
+        return (exp_dt - datetime.now(timezone.utc)).days
 
     @property
     def tier_config(self) -> dict:
@@ -137,10 +194,13 @@ class LicenseManager:
     # ── Activation ───────────────────────────────────────────────────────
 
     def activate(self, license_key: str) -> dict:
-        """Activate a license key. Validates format locally."""
-        valid, tier, error = _validate_key_format(license_key)
+        """Activate a license key. Validates format (and expiry) locally."""
+        valid, tier, error, expires_at = _validate_key_format(license_key)
         if not valid:
             return {"ok": False, "error": error}
+        if expires_at and datetime.now(timezone.utc) > (
+                datetime.fromisoformat(expires_at) + timedelta(days=GRACE_DAYS)):
+            return {"ok": False, "error": "This license has expired — please renew."}
 
         now = datetime.now(timezone.utc).isoformat()
         self._license = {
@@ -148,6 +208,7 @@ class LicenseManager:
             "tier": tier,
             "activated_at": now,
             "last_validated": now,
+            "expires_at": expires_at,
             "machine_id": _machine_id(),
         }
         self._save_license()
@@ -156,6 +217,7 @@ class LicenseManager:
             "tier": tier,
             "tier_name": TIERS[tier]["name"],
             "activated_at": now,
+            "expires_at": expires_at or "perpetual",
         }
 
     def deactivate(self) -> dict:
@@ -250,16 +312,23 @@ class LicenseManager:
                 "remaining": (limit - current) if limit != -1 else "unlimited",
             }
 
+        days_left = self.days_remaining()
         status = {
             "tier": self.tier,
             "tier_name": tier_cfg["name"],
             "is_activated": self.is_activated,
             "license_key": self._mask_key(),
             "activated_at": self._license.get("activated_at", ""),
+            "expires_at": self._license.get("expires_at", "") or "perpetual",
+            "days_remaining": days_left,
             "custom_rules": tier_cfg["custom_rules"],
             "usage_this_month": limits,
-            "billing_period": "monthly",
+            "billing_period": "annual",
         }
+        if days_left is not None and days_left <= 30:
+            status["renewal_notice"] = (
+                f"Your license expires in {days_left} days — renew at "
+                f"https://localmaskpro.com to keep Pro features.")
         if self.tier == "free":
             status["first_month_bonus"] = first_month
             if first_month:
@@ -334,7 +403,7 @@ class LicenseManager:
     def activate_with_org(self, license_key: str, server_url: str, org_name: str = "") -> dict:
         """Activate a license key and register with an org server."""
         # First validate locally
-        valid, tier, error = _validate_key_format(license_key)
+        valid, tier, error, _expires_at = _validate_key_format(license_key)
         if not valid:
             return {"ok": False, "error": error}
 

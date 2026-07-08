@@ -82,8 +82,11 @@ def _context_aware_replace(text: str, value: str, token: str) -> str:
     for pat in _KEY_POSITION_PATTERNS:
         text = pat.sub(_protect, text)
 
-    # Now replace — only unprotected (value) positions get masked
-    text = text.replace(value, token)
+    # Now replace — only unprotected (value) positions get masked.
+    # Word-boundary-aware (same semantics as _mask_text): the value inside a
+    # LONGER token (hex blob, base64, prefixed hostname) must not be replaced,
+    # or the surrounding token gets corrupted.
+    text = re.sub(r"(?<![.\w])" + re.escape(value) + r"(?![.\w])", token, text)
 
     # Restore protected key positions
     for placeholder, original in protected.items():
