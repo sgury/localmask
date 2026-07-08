@@ -773,19 +773,19 @@
     },
     "yaml": {
       "yaml_password": {
-        "pattern": "(?i)^\\s*\\w*(?:password|passwd|pwd|secret_?key|client[_-]?secret|master[_-]?key|encryption[_-]?key|become[_-]?pass|smtp[_-]?password|auth[_-]?password|db[_-]?password|redis[_-]?password|rabbitmq[_-]?password|mongo[_-]?password):\\s*['\\\"]?([^\\s'\\\"#]{6,})['\\\"]?\\s*(?:#.*)?$",
+        "pattern": "(?i)^\\s*\\w*(?:password|passwd|pwd|secret_?key|client[_-]?secret|master[_-]?key|encryption[_-]?key|become[_-]?pass|smtp[_-]?password|auth[_-]?password|db[_-]?password|redis[_-]?password|rabbitmq[_-]?password|mongo[_-]?password):\\s*['\\\"]?([^\\s'\\\"]{6,})['\\\"]?(?:\\s+#.*)?$",
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Password/secret field in YAML (quoted or unquoted)"
       },
       "yaml_api_key": {
-        "pattern": "(?i)^\\s*\\w*(?:api[_-]?key|apikey|access[_-]?key|secret[_-]?key|auth[_-]?token|api[_-]?token|api[_-]?secret|service[_-]?key|license[_-]?key|integration[_-]?key|app[_-]?key):\\s*['\\\"]?([^\\s'\\\"#]{8,})['\\\"]?\\s*(?:#.*)?$",
+        "pattern": "(?i)^\\s*\\w*(?:api[_-]?key|apikey|access[_-]?key|secret[_-]?key|auth[_-]?token|api[_-]?token|api[_-]?secret|service[_-]?key|license[_-]?key|integration[_-]?key|app[_-]?key):\\s*['\\\"]?([^\\s'\\\"]{8,})['\\\"]?(?:\\s+#.*)?$",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "API key/token field in YAML"
       },
       "yaml_token": {
-        "pattern": "(?i)^\\s*\\w*(?:token|access_token|auth_token|bearer_token|session_token):\\s*['\\\"]?([^\\s'\\\"#]{10,})['\\\"]?\\s*(?:#.*)?$",
+        "pattern": "(?i)^\\s*\\w*(?:token|access_token|auth_token|bearer_token|session_token):\\s*['\\\"]?([^\\s'\\\"]{10,})['\\\"]?(?:\\s+#.*)?$",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "Token field in YAML"
