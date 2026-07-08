@@ -862,5 +862,11 @@ def audit_verify() -> str:
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the `localmask-mcp` console script — runs the MCP
+    server over stdio (local only; no network port)."""
     mcp.run(transport="stdio")
+
+
+if __name__ == "__main__":
+    main()
