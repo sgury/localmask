@@ -355,6 +355,15 @@ _SOFT_VALUE_TYPES = {
 }
 _CODE_CALL = re.compile(r"[A-Za-z_]\w*\s*\(")   # func call: foo(
 _VERSION_CONSTRAINT = re.compile(r"[<>=!]=?\s*\d")  # >=2, <4, ==1.0
+_MEMBER_ACCESS = re.compile(r"^[A-Za-z_]\w*(?:\.\w+)+[,;)]?$")  # envVars.X,
+_URL_ENCODED = re.compile(r"%[0-9A-Fa-f]{2}")   # %2F, %23 URL-encoding
+# Well-known public build/tooling hosts — their URLs are never secrets.
+# `\\?://` tolerates the properties-file escaped colon (https\://).
+_PUBLIC_TOOL_URL = re.compile(
+    r"https?\\?://(?:[\w.-]*\.)?(?:maven\.apache\.org|services\.gradle\.org"
+    r"|repo\d*\.maven|repo\.maven|jcenter\.bintray|registry\.npmjs\.org"
+    r"|pypi\.org|files\.pythonhosted\.org|golang\.org|proxy\.golang\.org"
+    r"|nuget\.org|rubygems\.org|crates\.io|dl\.google\.com)", re.I)
 
 
 def _looks_like_code_value(v: str) -> bool:
@@ -367,6 +376,8 @@ def _looks_like_code_value(v: str) -> bool:
     if "{" in v and "}" in v:            # {self.username}, f"{x}"
         return True
     if v[:1] in ",;":                    # leading-comma code fragment
+        return True
+    if _MEMBER_ACCESS.match(v):          # envVars.JWT_RESET_PASSWORD_… (code)
         return True
     return False
 
@@ -962,6 +973,15 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # Skip any value carrying an interpolation marker.
         if ("{{" in v and "}}" in v) or "${" in v or "%(" in v \
                 or "<%=" in v or "#{" in v:
+            continue
+        # Never-secrets in any language/domain, whatever pattern matched them
+        # (found across Go/Java/Node cross-domain tests):
+        #  · JSON pointers / OpenAPI $refs  → #/components/schemas/User
+        #  · URL-encoded test strings       → Some%2FOther, slash%%2Fgordon
+        #  · public build/tooling URLs      → maven/gradle/apache download URLs
+        if v.startswith(("#/", "#/components")) \
+                or len(_URL_ENCODED.findall(v)) >= 2 or "%%" in v \
+                or _PUBLIC_TOOL_URL.search(v):
             continue
         # Broad infra inferences (any http(s) URL → internal_url, generic
         # hostnames) are PII/infra, not credentials. Per the sensitivity model
