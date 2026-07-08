@@ -304,6 +304,16 @@ def _dni_ok(value: str) -> bool:
     return bool(m) and _DNI_LETTERS[int(m.group(1)) % 23] == m.group(2).upper()
 
 
+def _cnp_ok(value: str) -> bool:
+    """Romanian CNP control digit: weights 279146358279 over the first 12
+    digits, sum % 11 (a remainder of 10 maps to 1)."""
+    digits = re.sub(r"\D", "", value)
+    if len(digits) != 13:
+        return False
+    c = sum(int(a) * int(b) for a, b in zip(digits[:12], "279146358279")) % 11
+    return int(digits[12]) == (1 if c == 10 else c)
+
+
 # Special characters that appear in generated passwords/keys but not in code
 # identifiers, versions, datetimes, or dtype strings. Separators (- _ . / :)
 # and '=' are deliberately excluded — '=' is an assignment operator and
@@ -1058,6 +1068,8 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         if dtype == "israeli_id" and not _israeli_id_ok(v):
             continue
         if dtype == "spanish_dni" and not _dni_ok(v):
+            continue
+        if dtype == "romanian_cnp" and not _cnp_ok(v):
             continue
         if dtype in ("password_assignment", "declare_password", "any_env_password"):
             if _is_word_like(v):

@@ -2038,6 +2038,26 @@
         "level": "standard",
         "reason": "Italian mobile number (PII)"
       }
+    },
+    "ro": {
+      "romanian_password": {
+        "pattern": "parol[aă]\\s*(?:este\\s+|[:=]\\s*)['\"]?([A-Za-z0-9!@#$%^&*_+~.\\-]{6,})",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Password labeled in Romanian"
+      },
+      "romanian_cnp": {
+        "pattern": "(?:\\bCNP\\b|cod\\s+numeric\\s+personal)\\D{0,20}?(?<!\\w)([1-8]\\d{12})(?![\\d\\w])",
+        "confidence": 0.93,
+        "level": "minimal",
+        "reason": "Romanian CNP (Cod Numeric Personal, checksum-validated PII)"
+      },
+      "romanian_phone": {
+        "pattern": "(?<![\\d\\w])(?:\\+40[\\s.-]?7\\d{2}[\\s.-]?\\d{3}[\\s.-]?\\d{3}|07\\d{2}[\\s.-]?\\d{3}[\\s.-]?\\d{3})(?![\\d\\w])",
+        "confidence": 0.85,
+        "level": "standard",
+        "reason": "Romanian mobile number (PII)"
+      }
     }
   }
 }

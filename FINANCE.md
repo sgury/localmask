@@ -18,15 +18,15 @@ LOCALMASK_MONEY_MODE=relative localmask scan .
 ```
 
 Only currency-anchored or finance-keyword-anchored numbers are touched
-(`42,000 ₪`, `$1,234.56`, `salary = 95000`, `תקציב: 120,000`). Bare numbers —
+(`$42,000`, `salary = 95000` — and the same labeled in any pack language: `salariu`, `שכר`, `пароль`-style keywords). Bare numbers —
 ports, versions, IDs — are never masked.
 
 ## The three modes — and what each one reveals
 
-| Mode | Edition | `42,000 ₪` becomes | The AI can | Revealed to the provider |
+| Mode | Edition | `$42,000` becomes | The AI can | Revealed to the provider |
 |---|---|---|---|---|
 | `relative` | **Free / OSS** | `(0.42*R_SALARY)` | compare, sum, compute ratios | relative sizes **within** a category |
-| `bucket` | Pro | `~[AMOUNT_5D_ILS_0]~` | reason about magnitude | order of magnitude + currency |
+| `bucket` | Pro | `~[AMOUNT_5D_USD_0]~` | reason about magnitude | order of magnitude + currency |
 | `token` | Pro | `~[AMOUNT_0]~` | nothing numeric | nothing |
 
 The signature `relative` mode is free and open-source. The opacity *choice*

@@ -1426,9 +1426,9 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
 
 Enable per scan:   LOCALMASK_MONEY_MODE=<mode> localmask scan .
 
-  relative   42,000 ILS -> (0.42*R_SALARY)       (AI can compare & compute) [FREE]
-  bucket     42,000 ILS -> ~[AMOUNT_5D_ILS_0]~   (order of magnitude only)  [PRO]
-  token      42,000 ILS -> ~[AMOUNT_0]~          (full opacity)             [PRO]
+  relative   $42,000 -> (0.42*R_SALARY)          (AI can compare & compute) [FREE]
+  bucket     $42,000 -> ~[AMOUNT_5D_USD_0]~      (order of magnitude only)  [PRO]
+  token      $42,000 -> ~[AMOUNT_0]~             (full opacity)             [PRO]
 
 'relative' sends each amount as a ratio to a secret crypto-random base,
 one base per category (salary/revenue/price), generated locally and stored

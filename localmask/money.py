@@ -5,10 +5,10 @@ money amounts (currency symbols/codes or finance keywords — never bare
 numbers) and replaces them per LOCALMASK_MONEY_MODE:
 
   off       (default) money amounts are not touched
-  token     full opacity:      42,000 ₪  ->  ~[AMOUNT_0]~
-  bucket    order of magnitude: 42,000 ₪  ->  ~[AMOUNT_5D_ILS_0]~
+  token     full opacity:      42,000 RON ->  ~[AMOUNT_0]~
+  bucket    order of magnitude: 42,000 RON ->  ~[AMOUNT_5D_RON_0]~
   relative  ratio to a secret per-repo, per-CATEGORY random base R:
-            42,000 ₪  ->  (0.42*R_SALARY)
+            42,000 RON ->  (0.42*R_SALARY)
             The AI can compare and compute; the absolute figure never leaves
             the machine. R is crypto-random, generated locally, stored in
             ~/.localmask/money_keys.json (0600). Separate categories (salary /
@@ -32,18 +32,23 @@ _KEYS_PATH = os.path.expanduser("~/.localmask/money_keys.json")
 # cross-category ratios (salary vs revenue) hidden.
 _CATEGORIES = {
     "salary":  ("salary", "salaries", "wage", "payroll", "compensation",
+                "salariu", "salarii",
                 "שכר", "משכורת", "משכורות"),
     "revenue": ("revenue", "income", "sales", "turnover", "arr", "mrr",
+                "venit", "venituri", "cifra de afaceri",
                 "הכנסה", "הכנסות", "מחזור"),
     "price":   ("price", "cost", "fee", "payment", "invoice", "budget",
-                "expense", "מחיר", "עלות", "תשלום", "חשבונית", "תקציב",
+                "expense", "preț", "pret", "plată", "plata", "factură",
+                "factura", "buget",
+                "מחיר", "עלות", "תשלום", "חשבונית", "תקציב",
                 "הוצאה", "הוצאות"),
 }
 _KEYWORDS = tuple(w for words in _CATEGORIES.values() for w in words) + (
-    "amount", "total", "sum", "סכום", 'סה"כ')
+    "amount", "total", "sum", "suma", "סכום", 'סה"כ')
 
 _SYMBOLS = {"₪": "ILS", "$": "USD", "€": "EUR", "£": "GBP"}
-_CODES = ("ILS", "NIS", "USD", "EUR", "GBP", 'ש"ח', "שקלים", "שקל")
+_CODES = ("ILS", "NIS", "USD", "EUR", "GBP", "RON", "LEI",
+          'ש"ח', "שקלים", "שקל")
 
 _NUM = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?"
 _MONEY_RES = [
@@ -99,9 +104,9 @@ def _currency(text: str) -> str:
         if sym in text:
             return code
     up = text.upper()
-    for code in ("ILS", "NIS", "USD", "EUR", "GBP"):
+    for code in ("ILS", "NIS", "USD", "EUR", "GBP", "RON", "LEI"):
         if code in up:
-            return "ILS" if code == "NIS" else code
+            return {"NIS": "ILS", "LEI": "RON"}.get(code, code)
     if 'ש"ח' in text or "שקל" in text:
         return "ILS"
     return "UNK"

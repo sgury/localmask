@@ -13,15 +13,17 @@ sync, and a CLI + MCP server. No AI model, no cloud, no account.
 
 ### New in this version
 - **Finance Mode (relative)** — share financial *analysis* with an AI without
-  sharing a single real figure. `42,000 ₪` becomes `(0.42*R_SALARY)`: the AI
-  can compare and compute (Dana earns 1.2× Yossi), but the absolute amounts,
+  sharing a single real figure. `$42,000` becomes `(0.42*R_SALARY)`: the AI
+  can compare and compute (Dana earns 1.2× John), but the absolute amounts,
   the currency and the scale never leave your machine. Enable with
   `LOCALMASK_MONEY_MODE=relative`. See **Finance Mode** below.
-- **7 language packs** — PII labeled in non-English code and comments:
-  Hebrew (Israeli ID ת״ז, check-digit-validated, phones, addresses), Russian
-  (passports), Arabic (national IDs), Spanish (DNI, letter-validated), French,
-  German (Steuernummer), Italian (codice fiscale) — plus passwords labeled in
-  each language. Select with `LOCALMASK_LANGS=he,de` (default: all).
+- **8 language packs** — PII labeled in non-English code and comments:
+  **Romanian** (CNP, checksum-validated), **Hebrew** (Israeli ID ת״ז,
+  check-digit-validated, phones, addresses), **Russian** (passports),
+  **Arabic** (national IDs), **Spanish** (DNI, letter-validated), **French**,
+  **German** (Steuernummer), **Italian** (codice fiscale) — plus passwords
+  labeled in each language. Select with `LOCALMASK_LANGS=ro,he,de`
+  (default: all).
 - **Boundary-hardened engine** — no pattern (and no mask) can ever grab a
   substring of a longer token: a key inside a hex/base64 blob is never falsely
   matched, and masking never corrupts a file. Verified on numpy (2,300+ files,
@@ -241,11 +243,11 @@ LOCALMASK_MONEY_MODE=relative localmask scan .
 
 | What's on disk | What the AI sees |
 |---|---|
-| `שכר של דנה: 42,000 ₪` | `שכר של דנה: (1.15*R_SALARY)` |
-| `שכר של יוסי: 35,000 ₪` | `שכר של יוסי: (0.96*R_SALARY)` |
-| `revenue: 8,500,000 ILS` | `revenue: (0.89*R_REVENUE)` |
+| `salary Dana: $42,000` | `salary Dana: (1.15*R_SALARY)` |
+| `salary John: $35,000` | `salary John: (0.96*R_SALARY)` |
+| `revenue: $8,500,000` | `revenue: (0.89*R_REVENUE)` |
 
-The AI can compute — 1.15/0.96 means Dana earns 1.2× Yossi — but the real
+The AI can compute — 1.15/0.96 means Dana earns 1.2× John — but the real
 numbers, the currency and the scale stay on your machine. Each category
 (salary / revenue / price) gets its **own** crypto-random secret base, so
 cross-category ratios (payroll as % of revenue) are hidden too. AI answers are
@@ -254,21 +256,24 @@ the full opacity choice (`token` / `bucket`) is a
 [Pro](https://localmaskpro.com) capability. Honest threat model in
 [FINANCE.md](FINANCE.md).
 
-## Multilingual detection — 7 language packs
+## Multilingual detection — 8 language packs
 
 Secrets and PII don't only hide in English. LocalMask ships keyword patterns
-for Hebrew, Russian, Arabic, Spanish, French, German and Italian:
+for **Romanian, Hebrew, Russian, Arabic, Spanish, French, German and
+Italian**:
 
 ```text
+// CNP: 1850301401008             ← Romanian CNP, checksum-validated
+# parola: Bucur3sti!9x            ← password labeled in Romanian
 # ת"ז של הלקוח: 234569176        ← Israeli ID, check-digit validated
 # пароль: S3cur3!Pass74           ← password labeled in Russian
 ; DNI: 12345678Z                  ← Spanish DNI, control-letter validated
 // كلمة المرور: Xk9$mPl2Qw        ← password labeled in Arabic
 ```
 
-National IDs are checksum-validated (a random 9-digit number near "ת״ז" does
-NOT match), and every pattern is word-boundary guarded so digits inside a
-longer key or hash never fire. Pick packs with `LOCALMASK_LANGS=he,ru,de`
+National IDs are checksum-validated (a random 13-digit number near "CNP"
+does NOT match), and every pattern is word-boundary guarded so digits inside
+a longer key or hash never fire. Pick packs with `LOCALMASK_LANGS=ro,he,de`
 (default: all; `none` disables). Adding a language is a JSON block in
 `regex_patterns.json` — no code.
 
