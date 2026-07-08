@@ -540,8 +540,19 @@ def _scan_entropy_strings(content: str, file_ext: str,
                 continue          # entry points (pkg.mod:func) — left side
                                   # needs a dotted lowercase path so colon-
                                   # joined keys (AAAA…:APA91…) stay flagged
-            if re.fullmatch(r"[A-Za-z_][\w.]*(?: [A-Za-z_][\w.]*)+", value):
-                continue          # identifier words ("external f2pysetupfunc")
+            if "|" in value or "0x" in value:
+                continue          # regex alternations, hex literals
+            if re.fullmatch(r"[A-Za-z]+\??", value):
+                continue          # pure-alpha runs (dtype code strings)
+            # Identifier-shaped rejects apply only to digit-light values —
+            # real keys are digit-heavy (acme_binance_secret_xYz987… is
+            # identifier-shaped but has 9 digits and must stay flagged).
+            if sum(c.isdigit() for c in value) <= 4:
+                if re.fullmatch(r"[A-Za-z_][\w.]*:?", value):
+                    continue      # dotted identifier, opt. trailing colon
+                if re.fullmatch(r"[A-Za-z_][\w.]*(?:[, ]+[A-Za-z_][\w.]*)+",
+                                value):
+                    continue      # identifier lists ("intproductf2pywrap, intpr")
             if sum(c.isdigit() for c in value) > 0.75 * len(value):
                 continue          # numeric blobs (test constants)
 

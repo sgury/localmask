@@ -330,6 +330,11 @@ class RegexRulesSafe:
                               else match.group(0))
                     if len(entity) < 3 or entity.lower() in cls.FALSE_POSITIVE_VALUES:
                         continue
+                    # <ANGLE-WRAPPED> values are placeholders/sentinels
+                    # (<your-api-key-here>, <RST-VALIDATE-SYNTAX-CHECK>),
+                    # never real secrets.
+                    if entity.startswith("<") and entity.endswith(">"):
+                        continue
                     if cls._is_noise_value(entity):
                         continue
                     if cls._is_weak_value(pattern_name, entity):
