@@ -704,6 +704,12 @@
       "confidence": 0.9,
       "level": "minimal",
       "reason": "Firebase Cloud Messaging (FCM) server key"
+    },
+    "k8s_hyphenated_secret": {
+      "pattern": "(?i)^\\s*[a-z0-9_-]*(?:secret|token|passwd|password|api[_-]?key|access[_-]?key|private[_-]?key|credential):\\s*['\\\"]?([^\\s'\\\"]{8,})['\\\"]?(?:\\s+#.*)?$",
+      "confidence": 0.85,
+      "level": "standard",
+      "reason": "Hyphenated secret key (k8s/yaml stringData)"
     }
   },
   "file_type_extra": {
