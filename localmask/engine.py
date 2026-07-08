@@ -287,6 +287,7 @@ _SECRET_SPECIAL = re.compile(r"[!@#$%^&*~]")
 # masking one would also corrupt the identical code elsewhere in the file.
 _CODE_PUNCT = re.compile(r"""[()\[\]{}<>|\\'"`]""")
 _SHELL_VAR = re.compile(r"\$\{|\$[A-Za-z_]{2,}")
+_HASH_TEMPLATE = re.compile(r"#\w+#")
 # Value shapes that are never secrets even next to an api_key/token variable:
 # a bare domain/host (label.label.tld, incl. cloud suffixes) or a Firebase-
 # style app-id (1:234567890123:web:abcdef…). Underscores excluded from the
@@ -319,6 +320,14 @@ def _looks_generated(value: str) -> bool:
     # Shell/template variable references ($LLVM_PREFIX, ${VAR}, $env:…) are
     # unexpanded templates — the secret, if any, is the variable's value.
     if _SHELL_VAR.search(value):
+        return False
+    # `#name#` template markers (f2py rules) and a `*` glob/regex operator
+    # never appear in generated keys.
+    if "*" in value or _HASH_TEMPLATE.search(value):
+        return False
+    # `=` means an assignment or flag (TERM=…, -Dflag=1) — a real token only
+    # carries `=` as trailing base64 padding, so allow it only at the end.
+    if "=" in value.rstrip("="):
         return False
     # Pure hex tokens (≥32: MD5/SHA/Twilio-style) and UUIDs are generated
     # credential shapes even though hex is only two classes. The ≥32 floor
