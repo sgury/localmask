@@ -1621,13 +1621,13 @@
         "reason": "API key value in prose"
       },
       "prose_token": {
-        "pattern": "(?i)\\btoken\\s*[:\\-–is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{20,})[\"\\']?",
+        "pattern": "(?i)\\btoken\\s*(?::|=|\\bis\\b|[-–](?=\\s))\\s*[\\\"']?([a-zA-Z0-9\\-_.]{20,})[\\\"']?",
         "confidence": 0.86,
         "level": "minimal",
         "reason": "Token value in prose"
       },
       "prose_server_name": {
-        "pattern": "(?i)\\b(?:server|host|hostname|endpoint)\\s+(?:is|at|called|named|:)\\s+[\"\\']?([a-zA-Z0-9][a-zA-Z0-9\\-_.]{3,})[\"\\']?",
+        "pattern": "(?i)\\b(?:server|host|hostname|endpoint)\\s+(?:is|at|called|named|:)\\s+[\\\"']?([a-zA-Z0-9][a-zA-Z0-9\\-_]*\\.[a-zA-Z0-9\\-_.]{2,})[\\\"']?",
         "confidence": 0.82,
         "level": "standard",
         "reason": "Server/host name mentioned in prose"
@@ -1663,7 +1663,7 @@
         "reason": "AWS access key in prose"
       },
       "prose_generic_key": {
-        "pattern": "(?i)\\b(?:key|secret)\\s*[:\\-–=]\\s*[\"\\']?([a-zA-Z0-9\\-_/+]{20,})[\"\\']?",
+        "pattern": "(?i)\\b(?:key|secret)\\s*(?::|=|[-–](?=\\s))\\s*[\\\"']?([a-zA-Z0-9\\-_/+]{20,})[\\\"']?",
         "confidence": 0.82,
         "level": "minimal",
         "reason": "Generic key/secret value in prose"
@@ -1834,7 +1834,8 @@
     "git@github.com",
     "you@example.com",
     "user@example.com",
-    "test@example.com"
+    "test@example.com",
+    "0123456789abcdef"
   ],
   "public_url_domains": [
     "google.com",

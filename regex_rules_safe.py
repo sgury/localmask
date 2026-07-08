@@ -342,6 +342,14 @@ class RegexRulesSafe:
                         continue
                     if cls._is_public_service_url(entity):
                         continue
+                    # Prose heuristics must not fire on slugs INSIDE a URL —
+                    # "…access-token-for-the-command-line/" is a help-page
+                    # path, not a token. Skip when the match sits within a
+                    # URL on the same line.
+                    if pattern_name.startswith("prose_") and "://" in line:
+                        if any(entity in u for u in
+                               re.findall(r"https?://\S+", line)):
+                            continue
                     # Skip email-like matches that are part of a connection URL
                     if pattern_name == "email" and "@" in entity:
                         if cls._EMAIL_IN_URL_RE.search(line):

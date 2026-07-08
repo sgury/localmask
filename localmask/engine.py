@@ -509,6 +509,41 @@ def _scan_entropy_strings(content: str, file_ext: str,
             # as {{ }} placeholders — the secret would be the var's value.
             if re.search(r"\$\{?[A-Z_]{2,}", value):
                 continue
+            # ── Structural rejects: code/data shapes that are never secrets.
+            # Real keys are single opaque runs — they don't carry escape
+            # sequences, regex metachars, bracket pairs, CSV separators,
+            # templates, comparisons, or flag prefixes. Everything below was
+            # validated against the numpy corpus (see 2026-07-07 FP report).
+            if "\\n" in value or "\\r" in value or "\\x" in value:
+                continue          # literal escapes → test data / templates
+            if value[0] in "-!%#<(@;?*":
+                continue          # flags, directives, type-code strings
+            if "(?" in value or "\\d" in value or "\\w" in value \
+                    or "\\s" in value or "\\Z" in value:
+                continue          # regex source text
+            if "[" in value and "]" in value:
+                continue          # dtype/slice/character-class syntax
+            if value.count(",") >= 2 or value.count(";") >= 2:
+                continue          # CSV rows, flag lists
+            if "$(" in value or re.search(r"#\w+#", value) or "->" in value \
+                    or ">=" in value or "<=" in value:
+                continue          # build templates (#name# markers), comparisons
+                                  # NB: a bare '#' is NOT a reject — strong
+                                  # passwords contain it (K3yst0re!…#2024)
+            if "None" in value or "self." in value:
+                continue          # pytest param ids, attribute chains
+            if re.match(r"[+-]?\d+[.\-/:]\d", value):
+                continue          # versions, floats, dates, times, ratios
+            if re.fullmatch(r"[\w.\-]+\.[a-z0-9]{1,4}", value, re.I):
+                continue          # filenames
+            if re.fullmatch(r"[a-z_][\w.]*\.[\w]+:[a-z_][\w.]*", value):
+                continue          # entry points (pkg.mod:func) — left side
+                                  # needs a dotted lowercase path so colon-
+                                  # joined keys (AAAA…:APA91…) stay flagged
+            if re.fullmatch(r"[A-Za-z_][\w.]*(?: [A-Za-z_][\w.]*)+", value):
+                continue          # identifier words ("external f2pysetupfunc")
+            if sum(c.isdigit() for c in value) > 0.75 * len(value):
+                continue          # numeric blobs (test constants)
 
             # HTTP headers / localhost example connection strings are never
             # secrets (shared filter with the regex layer).
