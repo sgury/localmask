@@ -186,7 +186,7 @@
     "cli_mysql_password": {
       "pattern": "-p['\\\"]([^'\\\"]{6,})['\\\"]",
       "confidence": 0.93,
-      "level": "minimal",
+      "level": "strict",
       "reason": "MySQL CLI -p password flag"
     },
     "cli_redis_password": {
@@ -348,7 +348,7 @@
     "tf_hcl_username": {
       "pattern": "(?i)(?:username|db_username|master_username|admin_user)\\s*=\\s*['\\\"]([^'\\\"]{3,})['\\\"]",
       "confidence": 0.88,
-      "level": "standard",
+      "level": "strict",
       "reason": "Terraform username field"
     },
     "service_account": {
@@ -698,6 +698,12 @@
       "confidence": 0.85,
       "level": "standard",
       "reason": "credit card number"
+    },
+    "fcm_server_key": {
+      "pattern": "\\bAAAA[A-Za-z0-9_-]{5,}:APA91[A-Za-z0-9_-]{20,}",
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Firebase Cloud Messaging (FCM) server key"
     }
   },
   "file_type_extra": {
@@ -1629,13 +1635,13 @@
       "prose_server_name": {
         "pattern": "(?i)\\b(?:server|host|hostname|endpoint)\\s+(?:is|at|called|named|:)\\s+[\\\"']?([a-zA-Z0-9][a-zA-Z0-9\\-_]*\\.[a-zA-Z0-9\\-_.]{2,})[\\\"']?",
         "confidence": 0.82,
-        "level": "standard",
+        "level": "strict",
         "reason": "Server/host name mentioned in prose"
       },
       "prose_db_name": {
         "pattern": "(?i)\\b(?:database|db|schema)\\s+(?:is|called|named|:)\\s+[\"\\']?([a-zA-Z0-9_\\-]{2,})[\"\\']?",
         "confidence": 0.8,
-        "level": "standard",
+        "level": "strict",
         "reason": "Database name mentioned in prose"
       },
       "prose_internal_url": {

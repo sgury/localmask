@@ -345,6 +345,31 @@ def _looks_generated(value: str) -> bool:
 _PAIRS = {"(": ")", "[": "]", "{": "}"}
 _PAIRS_REV = {c: o for o, c in _PAIRS.items()}
 
+# Inferred/prose/assignment patterns that tend to match code, not literals.
+# High-precision vendor patterns are deliberately excluded.
+_SOFT_VALUE_TYPES = {
+    "password_unquoted", "unquoted_env_secret", "any_env_secret",
+    "any_env_token", "email_credential", "prose_db_name",
+    "prose_server_name", "prose_generic_key", "prose_token",
+    "tf_hcl_username", "cli_mysql_password", "cli_password",
+}
+_CODE_CALL = re.compile(r"[A-Za-z_]\w*\s*\(")   # func call: foo(
+_VERSION_CONSTRAINT = re.compile(r"[<>=!]=?\s*\d")  # >=2, <4, ==1.0
+
+
+def _looks_like_code_value(v: str) -> bool:
+    """True if a soft-pattern value is code/template/version rather than a
+    literal secret: a function call, a version constraint, a {placeholder},
+    or a fragment starting with a separator (`, default=…`). Kept narrow so
+    real secrets (which never contain these) are untouched."""
+    if _CODE_CALL.search(v) or _VERSION_CONSTRAINT.search(v):
+        return True
+    if "{" in v and "}" in v:            # {self.username}, f"{x}"
+        return True
+    if v[:1] in ",;":                    # leading-comma code fragment
+        return True
+    return False
+
 def _trim_unbalanced(v: str) -> str:
     """Strip leading openers / trailing closers whose partner isn't inside
     the value. Masking half of a bracket pair corrupts the surrounding code."""
@@ -491,6 +516,70 @@ def _infer_secret_type(value: str, context_line: str) -> tuple[str, str]:
 
     # Fallback: generic secret
     return "secret", "Secret value (auto-detected by entropy)"
+
+
+# A base64 run long enough to hold a real credential. Bounded so we don't
+# try to decode megabyte blobs. Standard and url-safe alphabets both covered
+# by the charset; validated per-match.
+_B64_RUN = re.compile(r"(?<![A-Za-z0-9+/=_-])([A-Za-z0-9+/_-]{24,1024}={0,2})"
+                      r"(?![A-Za-z0-9+/=_-])")
+# Secret-naming context around a blob (used when the decoded plaintext has no
+# regex hit of its own but the variable clearly holds a credential).
+_B64_SECRET_CTX = re.compile(
+    r"(?i)(secret|password|passwd|api[_-]?key|auth[_-]?token|access[_-]?token"
+    r"|credential|private[_-]?key|encryption|signing[_-]?key|\.pem)")
+
+
+def _scan_base64_secrets(content: str, file_ext: str,
+                         already_found: set) -> list:
+    """Decode base64 blobs and re-scan the plaintext. Flag the blob when the
+    decoded text either matches a credential pattern (high precision — a real
+    key was merely encoded) or sits in an unmistakable secret-naming context.
+    Random/binary base64 (images, test vectors) fails to decode to text or
+    yields no secret, so it is ignored."""
+    import base64 as _b64
+    from regex_rules_safe import RegexRulesSafe
+    results = []
+    lines = content.split("\n")
+    for m in _B64_RUN.finditer(content):
+        blob = m.group(1)
+        if blob in already_found:
+            continue
+        core = len(blob) - (len(blob) - len(blob.rstrip("=")))
+        if core % 4 and len(blob) % 4:      # not a whole base64 quantum
+            continue
+        std = blob.replace("-", "+").replace("_", "/")
+        pad = "=" * (-len(std) % 4)
+        try:
+            raw = _b64.b64decode(std + pad, validate=True)
+            decoded = raw.decode("utf-8")
+        except Exception:
+            continue                        # binary / not valid base64 text
+        if not decoded.isprintable() and "\n" not in decoded:
+            continue
+        line_no = content[:m.start()].count("\n") + 1
+        line = lines[line_no - 1] if line_no <= len(lines) else ""
+
+        # (a) the plaintext itself carries a credential — highest precision.
+        inner = RegexRulesSafe.scan_file("decoded." + file_ext, decoded,
+                                         "standard")
+        strong = [h for h in inner
+                  if h.get("type") not in ("email", "ip_address_private",
+                                           "phone_us", "credit_card")]
+        # (b) or the blob sits in a secret-named field.
+        ctx = _B64_SECRET_CTX.search(line)
+        if not strong and not ctx:
+            continue
+        why = (f"base64 decodes to {strong[0].get('type')}" if strong
+               else "base64 value in a secret field")
+        results.append({
+            "entity": blob, "type": "base64_encoded_secret",
+            "confidence": 0.9 if strong else 0.8, "level": "standard",
+            "line": line_no, "context": line.strip()[:120],
+            "file_type": file_ext, "pattern_reason": why,
+        })
+        already_found.add(blob)
+    return results
 
 
 def _scan_entropy_strings(content: str, file_ext: str,
@@ -682,9 +771,22 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
             raw_detections.append(hit)
 
     # ── Layer 3: Entropy-based secret scanner ─────────────────────────────
+    # NB: the entropy scanner MUTATES the set it's given (adds each value it
+    # flags). Give it a copy so `already_found` stays the clean regex+NER set
+    # for the base64 layer below.
     already_found = {d["entity"] for d in raw_detections}
-    _entropy_hits = _scan_entropy_strings(content, file_ext, already_found)
+    _entropy_hits = _scan_entropy_strings(content, file_ext, set(already_found))
     raw_detections.extend(_entropy_hits)
+
+    # ── Layer 3b: base64 decode-and-rescan ───────────────────────────────
+    # A base64 blob that decodes to a live credential (e.g. a k8s Secret
+    # `data:` value that is base64("sk_live_…"), or an encoded token) is
+    # invisible to a surface scan. Decode each blob and re-run the regex
+    # layer on the plaintext; flag the ORIGINAL blob when the plaintext
+    # holds a real secret. Uses the clean regex+NER set (not entropy's) so a
+    # weaker entropy claim doesn't suppress the stronger decoded verdict —
+    # dedup merges any overlap.
+    raw_detections.extend(_scan_base64_secrets(content, file_ext, already_found))
 
     # ── Layer 4: LLM gate — ask Ollama about ambiguous detections ────────
     # Obviously-sensitive types (credentials, keys, passwords, connections)
@@ -706,6 +808,9 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         "password_unquoted", "unquoted_env_secret", "any_env_password",
         "any_env_secret", "any_env_token", "tf_hcl_secret",
         "java_properties_password",
+        # Already high-precision: FCM keys have a fixed shape, and a base64
+        # blob we DECODED and re-scanned is verified — don't second-guess.
+        "fcm_server_key", "base64_encoded_secret",
     }
 
     if bert and raw_detections and not session.get("skip_llm"):
@@ -718,7 +823,17 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
 
         for i, det in enumerate(raw_detections):
             det_type = det.get("type", det.get("subtype", ""))
-            if det_type in _SKIP_LLM_TYPES:
+            # Skip the LLM for named-secret patterns AND for any high-precision
+            # regex hit (conf ≥ 0.9). A value that matched a vendor pattern like
+            # whsec_… / AIza… / dd… / ghsecret_… IS that secret — letting the
+            # classifier second-guess it only drops real credentials (this was
+            # measured: the gate was dropping stripe-webhook/datadog/github/
+            # google keys the regex layer had already nailed).
+            _reason = str(det.get("pattern_reason", ""))
+            is_regex = bool(_reason) and "auto-detected" not in _reason \
+                and not _reason.startswith("NER:")   # exclude entropy + NER
+            if det_type in _SKIP_LLM_TYPES or \
+                    (is_regex and det.get("confidence", 0) >= 0.9):
                 det["llm_decision"] = "SENSITIVE"
                 det["llm_confidence"] = 0.95
                 det["llm_reason"] = "High-confidence pattern"
@@ -821,6 +936,9 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # them over generic inferences (email, secret) for the same value.
         "url_embedded_password", "db_connection_url", "db_connection_string",
         "mongodb_connection_string", "jdbc_connection_string", "redis_url",
+        # A decoded-and-verified base64 blob (or an FCM key) beats a generic
+        # entropy claim on the same value — and masks directly (above).
+        "base64_encoded_secret", "fcm_server_key",
     }
     # Inferred infra/PII types (from _infer_secret_type value heuristics) that
     # are not credentials — gated to 'strict' so standard scans stay low-noise.
@@ -860,6 +978,15 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         if dtype in ("password_assignment", "declare_password", "any_env_password"):
             if _is_word_like(v):
                 continue
+        # Soft/inferred patterns (unquoted passwords, prose names, HCL/CLI
+        # values) frequently match CODE rather than a literal secret — a
+        # function call, a bare identifier, a {template}, or a version
+        # constraint. Reject those. Named high-precision vendor patterns are
+        # NOT in this set, so real keys are unaffected. (numpy/requests/flask
+        # false positives: get_auth_from_url(proxy), {self.username},
+        # charset_normalizer>=2,<4, default=5000.)
+        if dtype in _SOFT_VALUE_TYPES and _looks_like_code_value(v):
+            continue
         if v not in seen:
             seen[v] = d
         elif d.get("type", "") in _SPECIFIC_PATTERNS:
@@ -880,7 +1007,12 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # by the key-position guard in _context_aware_replace, which silently
         # drops them. Their shape proves they're the secret, so mask directly.
         # Data-driven: the set comes from the pattern DB, not hardcoded names.
-        if det.get("type", "") in RegexRulesSafe.DIRECT_MASK:
+        # base64 blobs and FCM keys are the whole value (never a key name), so
+        # the key-position guard in _context_aware_replace would wrongly
+        # protect them (leaving the token absent → finding silently dropped).
+        # They're verified secrets — mask directly, like DIRECT_MASK patterns.
+        if det.get("type", "") in RegexRulesSafe.DIRECT_MASK \
+                or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key"):
             masked = masked.replace(value, token)
         else:
             masked = _context_aware_replace(masked, value, token)
