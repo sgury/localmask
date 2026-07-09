@@ -271,12 +271,9 @@ cross-category ratios (payroll as % of revenue) stay hidden too.
 **R:** generated with a CSPRNG on your machine, stored with 0600 permissions,
 never uploaded anywhere.
 
-**What the paid editions add:**
-- **Pro** — choose how much the AI sees: ratios · order-of-magnitude only
-  (`~[AMOUNT_5D_USD_0]~`) · fully opaque (`~[AMOUNT_0]~`). Works on live AI
-  traffic too, through the AI proxy.
-- **Team / Enterprise** — security locks the policy org-wide; every seat
-  complies. Enterprise adds an audit trail that proves nothing left.
+Relative mode is **free and open source**. Choosing the opacity level
+(order-of-magnitude or fully opaque) and locking it org-wide are Pro / Team —
+see [pricing](https://localmaskpro.com/#pricing).
 
 Only currency-anchored or finance-keyword-anchored numbers are touched — bare
 numbers (ports, versions, IDs) never are. The vocabulary is editable in
