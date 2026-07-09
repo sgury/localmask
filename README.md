@@ -34,8 +34,9 @@ sync, and a CLI + MCP server. No AI model, no cloud, no account.
   in `regex_patterns.json`; add or tweak rules with no code.
 
 > Want an AI model that catches what patterns miss and learns from your
-> corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) that
-> scrubs secrets out of your live AI traffic, and a **team-shared vault** so
+> corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) — the
+> masking stage in front of your AI (or your company's AI gateway), so
+> compliance sees clean prompts and stops blocking developers, and a **team-shared vault** so
 > everyone gets consistent tokens? See [LocalMask Pro](https://localmaskpro.com).
 
 ---
@@ -97,11 +98,17 @@ localmask publish <scan_id> https://github.com/you/my-project-masked.git
 
 Only masked content is pushed. Real values never leave your machine.
 
-### Approval gate (review before publishing)
+### Security review — a second approval
 
-By default LocalMask **won't publish until the scan is reviewed & approved** — so
-a masked mirror never goes out (and `sync`/`hook` never auto-republish) with
-unreviewed detections. Approve either way:
+Masking is the first line; **a second, human approval** stands between a scan
+and anything leaving the machine. The developer reviews and edits detections;
+then security signs off — nothing publishes unapproved, and a `sync` that
+finds new secrets automatically un-approves until re-reviewed. **Auto-approve**
+keeps this scalable: scans where every detection clears your confidence bar
+(default 95%) flow through automatically; anything uncertain waits for a
+human. Every approve/reject decision also teaches the Pro classifier.
+
+Approve either way:
 
 ```bash
 localmask review <scan_id>        # decide each detection; approves when none are left pending
@@ -233,9 +240,15 @@ the git credentials already on your machine (e.g. `gh auth login`), or pass
 
 ## Finance Mode — AI analysis of financials without the figures
 
-Teams that won't paste salaries, prices or revenues into an AI can still get
-AI analysis. Money amounts (currency-anchored: `₪ $ €`, or finance keywords
-like `salary` / `שכר` / `price`) are replaced before anything reaches the AI:
+Teams that won't paste salaries, prices or revenues into an AI get no AI help
+on exactly the data that matters most. Finance Mode fixes that.
+
+**How it works:**
+1. LocalMask replaces every amount with a ratio to **R** — a random number
+   only your machine knows. `$42,000` becomes `1.15×R`.
+2. Your AI reads the ratios and does the analysis — it never sees amounts,
+   currency, or scale.
+3. Answers come back translated to real numbers, locally.
 
 ```bash
 LOCALMASK_MONEY_MODE=relative localmask scan .
@@ -247,14 +260,28 @@ LOCALMASK_MONEY_MODE=relative localmask scan .
 | `salary John: $35,000` | `salary John: (0.96*R_SALARY)` |
 | `revenue: $8,500,000` | `revenue: (0.89*R_REVENUE)` |
 
-The AI can compute — 1.15/0.96 means Dana earns 1.2× John — but the real
-numbers, the currency and the scale stay on your machine. Each category
-(salary / revenue / price) gets its **own** crypto-random secret base, so
-cross-category ratios (payroll as % of revenue) are hidden too. AI answers are
-re-hydrated back to real numbers locally. `relative` is free and open source;
-the full opacity choice (`token` / `bucket`) is a
-[Pro](https://localmaskpro.com) capability. Honest threat model in
-[FINANCE.md](FINANCE.md).
+**You ask:** "Is Dana paid fairly compared to John?"
+**The AI answers — correctly:** "Dana earns about 20% more than John."
+Right answer; zero numbers exposed.
+
+**What's hidden:** the amounts, the currency, the scale.
+**What's visible:** ratios within one category only — that's the analysis you
+asked to keep. Salaries, revenues and prices each get their own R, so
+cross-category ratios (payroll as % of revenue) stay hidden too.
+**R:** generated with a CSPRNG on your machine, stored with 0600 permissions,
+never uploaded anywhere.
+
+**What the paid editions add:**
+- **Pro** — choose how much the AI sees: ratios · order-of-magnitude only
+  (`~[AMOUNT_5D_USD_0]~`) · fully opaque (`~[AMOUNT_0]~`). Works on live AI
+  traffic too, through the AI proxy.
+- **Team / Enterprise** — security locks the policy org-wide; every seat
+  complies. Enterprise adds an audit trail that proves nothing left.
+
+Only currency-anchored or finance-keyword-anchored numbers are touched — bare
+numbers (ports, versions, IDs) never are. The vocabulary is editable in
+`regex_patterns.json` (add your own domain terms, no code). Full details and
+the honest threat model: [FINANCE.md](FINANCE.md).
 
 ## Multilingual detection — 8 language packs
 
@@ -380,7 +407,7 @@ Everything is local. There is no telemetry and no network call in the free editi
 | CLI + MCP server | ✓ | ✓ | ✓ |
 | Local AI model that learns | — | ✓ | ✓ |
 | Web dashboard | — | ✓ | ✓ |
-| AI proxy (prompt firewall for your AI traffic) | — | ✓ | ✓ |
+| AI proxy — masking before your AI / gateway | — | ✓ | ✓ |
 | Team-shared vault (consistent tokens across machines) | — | — | ✓ |
 | Org shared rules · LDAP/AD · SSO | — | — | ✓ |
 

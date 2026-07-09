@@ -1116,7 +1116,7 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
             # Direct mask skips the key-position guard but still must respect
             # token boundaries — replacing the value inside a longer blob
             # (hex/base64 that happens to contain it) corrupts the blob.
-            masked = re.sub(r"(?<![.\w])" + re.escape(value) + r"(?![.\w])",
+            masked = re.sub(r"(?<![.\w])" + re.escape(value) + r"(?!\w|\.\w)",
                             token, masked)
         else:
             masked = _context_aware_replace(masked, value, token)

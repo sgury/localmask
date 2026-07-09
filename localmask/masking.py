@@ -86,7 +86,7 @@ def _context_aware_replace(text: str, value: str, token: str) -> str:
     # Word-boundary-aware (same semantics as _mask_text): the value inside a
     # LONGER token (hex blob, base64, prefixed hostname) must not be replaced,
     # or the surrounding token gets corrupted.
-    text = re.sub(r"(?<![.\w])" + re.escape(value) + r"(?![.\w])", token, text)
+    text = re.sub(r"(?<![.\w])" + re.escape(value) + r"(?!\w|\.\w)", token, text)
 
     # Restore protected key positions
     for placeholder, original in protected.items():
@@ -106,13 +106,13 @@ def _mask_text(s: dict, text: str) -> str:
         # Use word-boundary-aware replacement to avoid partial matches
         # e.g. don't replace "meridian-fs.local" inside "PRDORA02.meridian-fs.local"
         # A preceding dot or alphanumeric means this is part of a larger token
-        pattern = r'(?<![.\w])' + re.escape(value) + r'(?![.\w])'
+        pattern = r'(?<![.\w])' + re.escape(value) + r'(?!\w|\.\w)'
         text = re.sub(pattern, token, text)
     # Second pass: case-insensitive
     for value, token in vault_sorted:
         if token in text:
             continue
-        pattern = r'(?<![.\w])' + re.escape(value) + r'(?![.\w])'
+        pattern = r'(?<![.\w])' + re.escape(value) + r'(?!\w|\.\w)'
         text = re.sub(pattern, token, text, flags=re.IGNORECASE)
     return text
 

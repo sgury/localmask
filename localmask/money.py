@@ -29,43 +29,62 @@ MODES = ("off", "token", "bucket", "relative")
 _KEYS_PATH = os.path.expanduser("~/.localmask/money_keys.json")
 
 # Finance keywords → category. A separate random base per category keeps
-# cross-category ratios (salary vs revenue) hidden.
-_CATEGORIES = {
+# cross-category ratios (salary vs revenue) hidden. The vocabulary is
+# data-driven: regex_patterns.json's "money" section is the source of truth
+# (customers extend it with their own terms, no code); these built-ins are
+# the fallback when the config lacks a money section.
+_FALLBACK_CATEGORIES = {
     "salary":  ("salary", "salaries", "wage", "payroll", "compensation",
-                "salariu", "salarii",
-                "שכר", "משכורת", "משכורות"),
+                "salariu", "salarii", "שכר", "משכורת", "משכורות"),
     "revenue": ("revenue", "income", "sales", "turnover", "arr", "mrr",
-                "venit", "venituri", "cifra de afaceri",
-                "הכנסה", "הכנסות", "מחזור"),
+                "venit", "venituri", "הכנסה", "הכנסות", "מחזור"),
     "price":   ("price", "cost", "fee", "payment", "invoice", "budget",
                 "expense", "preț", "pret", "plată", "plata", "factură",
-                "factura", "buget",
-                "מחיר", "עלות", "תשלום", "חשבונית", "תקציב",
-                "הוצאה", "הוצאות"),
+                "factura", "buget", "מחיר", "עלות", "תשלום", "חשבונית",
+                "תקציב", "הוצאה", "הוצאות"),
 }
-_KEYWORDS = tuple(w for words in _CATEGORIES.values() for w in words) + (
-    "amount", "total", "sum", "suma", "סכום", 'סה"כ')
+_FALLBACK_EXTRA = ("amount", "total", "sum", "suma", "סכום", 'סה"כ')
 
 _SYMBOLS = {"₪": "ILS", "$": "USD", "€": "EUR", "£": "GBP"}
 _CODES = ("ILS", "NIS", "USD", "EUR", "GBP", "RON", "LEI",
           'ש"ח', "שקלים", "שקל")
 
 _NUM = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?"
-_MONEY_RES = [
-    # ₪42,000  /  $ 1,234.56  — symbol before the number
-    re.compile(r"(?<![\d\w.])([₪$€£]\s?(?:%s))(?![\d\w.%%])" % _NUM),
-    # 42,000 ₪  /  1234.56€ — symbol after the number
-    re.compile(r"(?<![\d\w.])((?:%s)\s?[₪$€£])(?![\d\w.%%])" % _NUM),
-    # 42,000 ILS / 1,200 ש"ח — currency code after a formatted number
-    re.compile(r"(?<![\d\w.])((?:%s)\s?(?:%s))(?![\d\w.%%])"
-               % (_NUM, "|".join(re.escape(c) for c in _CODES)), re.I),
-    # keyword-anchored bare number: salary: 95000 / salary_yossi = 35000 /
-    # תקציב שיווק = 120,000 — a bounded [\w\s] gap allows suffixes between
-    # the finance keyword and the separator. Bare numbers are ONLY flagged
-    # next to a finance keyword — ports/ids/versions stay untouched.
-    re.compile(r"(?i)(?:%s)[\w\s]{0,24}?[:=]\s*['\"]?((?:%s))(?![\d\w.%%])"
-               % ("|".join(_KEYWORDS), _NUM)),
-]
+
+_vocab_cache = {"key": None, "cats": None, "res": None}
+
+
+def _vocab():
+    """Categories + compiled patterns from regex_patterns.json ('money'
+    section), rebuilt when the config changes; falls back to built-ins."""
+    try:
+        from regex_rules_safe import _PATTERN_META
+        section = _PATTERN_META.get("money") or {}
+    except Exception:
+        section = {}
+    cats = {k: tuple(v) for k, v in (section.get("categories") or {}).items()} \
+        or dict(_FALLBACK_CATEGORIES)
+    extra = tuple(section.get("extra_keywords") or _FALLBACK_EXTRA)
+    key = (tuple(sorted((k, v) for k, v in cats.items())), extra)
+    if _vocab_cache["key"] == key:
+        return _vocab_cache["cats"], _vocab_cache["res"]
+    keywords = tuple(w for words in cats.values() for w in words) + extra
+    res = [
+        # ₪42,000  /  $ 1,234.56  — symbol before the number
+        re.compile(r"(?<![\d\w.])([₪$€£]\s?(?:%s))(?![\d\w%%])(?!\.\d)" % _NUM),
+        # 42,000 ₪  /  1234.56€ — symbol after the number
+        re.compile(r"(?<![\d\w.])((?:%s)\s?[₪$€£])(?![\d\w%%])" % _NUM),
+        # 42,000 ILS / 1,200 ש"ח — currency code after a formatted number
+        re.compile(r"(?<![\d\w.])((?:%s)\s?(?:%s))(?![\d\w%%])(?!\.\d)"
+                   % (_NUM, "|".join(re.escape(c) for c in _CODES)), re.I),
+        # keyword-anchored bare number: salary: 95000 / bonus_dana = 15000 —
+        # a bounded [\w\s] gap allows suffixes between the keyword and the
+        # separator. Bare numbers are ONLY flagged next to a finance keyword.
+        re.compile(r"(?i)(?:%s)[\w\s]{0,24}?[:=]\s*['\"]?((?:%s))(?![\d\w%%])(?!\.\d)"
+                   % ("|".join(re.escape(k) for k in keywords), _NUM)),
+    ]
+    _vocab_cache.update(key=key, cats=cats, res=res)
+    return cats, res
 
 
 def money_mode() -> str:
@@ -114,7 +133,8 @@ def _currency(text: str) -> str:
 
 def _category(line: str) -> str:
     low = line.lower()
-    for cat, words in _CATEGORIES.items():
+    cats, _ = _vocab()
+    for cat, words in cats.items():
         if any(w in low for w in words):
             return cat
     return "amount"
@@ -132,9 +152,10 @@ def scan_money(content: str, file_ext: str) -> list:
     if not _NOTIFIED:
         _NOTIFIED = True
         print(FINANCE_NOTICE.format(mode=money_mode()))
+    _, money_res = _vocab()
     results, seen_spans = [], set()
     for line_no, line in enumerate(content.split("\n"), 1):
-        for rx in _MONEY_RES:
+        for rx in money_res:
             for m in rx.finditer(line):
                 span_key = (line_no, m.start(1), m.end(1))
                 if any(s[0] == line_no and s[1] <= m.start(1) and m.end(1) <= s[2]
