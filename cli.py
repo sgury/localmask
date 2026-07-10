@@ -55,9 +55,17 @@ _LATEST_URL = os.environ.get("LOCALMASK_LATEST_URL",
 
 
 def _current_version() -> str:
+    # Baked at build time (PyPI/tarball). Fall back to installed package
+    # metadata (git/pip installs), then to 'dev' in the raw source tree.
     try:
         from localmask._edition import VERSION
-        return VERSION
+        if VERSION and VERSION != "dev":
+            return VERSION
+    except Exception:
+        pass
+    try:
+        from importlib.metadata import version as _pkgver
+        return _pkgver("localmask")
     except Exception:
         return "dev"
 
