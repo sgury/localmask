@@ -49,6 +49,134 @@ BG_BLUE = "\033[44m"
 RESET = "\033[0m"
 
 
+# ── Update discovery (opt-in only — never called during a scan) ──────────────
+_LATEST_URL = os.environ.get("LOCALMASK_LATEST_URL",
+                             "https://localmaskpro.com/latest.json")
+
+
+def _current_version() -> str:
+    try:
+        from localmask._edition import VERSION
+        return VERSION
+    except Exception:
+        return "dev"
+
+
+def _fetch_latest():
+    """Return (version, notes) from latest.json, or (None, None) offline.
+    Only called from `check-updates` / `license` — LocalMask never contacts
+    the network on its own."""
+    try:
+        req = urllib.request.Request(
+            _LATEST_URL, headers={"User-Agent": "localmask-cli"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        return str(d.get("version", "")) or None, d.get("notes", "")
+    except Exception:
+        return None, None
+
+
+def _update_notice():
+    """One-line 'newer version available' string for `localmask license`,
+    or '' if current/offline. Best-effort, silent on any failure."""
+    cur = _current_version()
+    latest, _ = _fetch_latest()
+    if latest and latest != cur:
+        return f"⬆ v{latest} available — run: localmask check-updates"
+    return ""
+
+
+def _maybe_fail_on_detection(args, stats):
+    """Exit non-zero when --fail-on-detection is set and secrets were found.
+    Turns `localmask scan` into a pre-commit / CI gate."""
+    if not getattr(args, "fail_on_detection", False):
+        return
+    n = (stats or {}).get("total_detections", 0)
+    if n > 0:
+        sys.stderr.write(
+            f"\n\033[91m✗ {n} secret(s)/PII detected — blocking.\033[0m "
+            "Mask or remove them, or run without --fail-on-detection.\n")
+        sys.exit(1)
+
+
+def _proxy_setup(tool: str, port: int):
+    """Point a dev tool at the local masking proxy in one command.
+
+    Ensures ~/.localmask/proxy.yaml exists (so the user only fills in their
+    upstream key), writes a sourceable ~/.localmask/proxy.env, and — for
+    Claude Code — merges ANTHROPIC_BASE_URL into ~/.claude/settings.json
+    (with a backup). For everything else it prints the exact config to paste.
+    Never touches your real API keys."""
+    import json as _json
+    G, C, D, B, Y, X = GREEN, CYAN, DIM, BOLD, YELLOW, RESET
+    base = f"http://127.0.0.1:{port}"
+    home = os.path.expanduser("~")
+    lm_dir = os.path.join(home, ".localmask")
+    os.makedirs(lm_dir, exist_ok=True)
+
+    if not tool:
+        print(f"\n  {B}Usage:{X} localmask proxy setup <claude-code|cursor|codex|env>\n")
+        print(f"  Routes the tool's AI traffic through your local masking proxy")
+        print(f"  ({base}) so secrets are masked on THIS machine before anything")
+        print(f"  is sent upstream.\n")
+        return
+
+    # 1) Seed proxy.yaml so the user just adds their upstream key.
+    cfg_path = os.path.join(lm_dir, "proxy.yaml")
+    if not os.path.exists(cfg_path):
+        with open(cfg_path, "w") as f:
+            f.write(
+                "listen_host: 127.0.0.1\n"
+                f"listen_port: {port}\n"
+                "rehydrate: true\n"
+                "mask:\n  sensitivity: standard\n  use_model: false\n"
+                "upstreams:\n"
+                "  anthropic:\n    base_url: https://api.anthropic.com\n    api_key: \"\"\n"
+                "  openai:\n    base_url: https://api.openai.com\n    api_key: \"\"\n")
+        print(f"  {G}✓{X} wrote {D}{cfg_path}{X} — add your upstream API key there")
+    else:
+        print(f"  {D}proxy config already at {cfg_path}{X}")
+
+    # 2) A sourceable env file, useful for any shell-based tool.
+    env_path = os.path.join(lm_dir, "proxy.env")
+    with open(env_path, "w") as f:
+        f.write(f"export ANTHROPIC_BASE_URL={base}\n"
+                f"export OPENAI_BASE_URL={base}/v1\n")
+    print(f"  {G}✓{X} wrote {D}{env_path}{X}")
+
+    print(f"\n  {B}Start the proxy{X} (Pro):  {C}localmask proxy --port {port}{X}\n")
+
+    if tool == "claude-code":
+        settings = os.path.join(home, ".claude", "settings.json")
+        os.makedirs(os.path.dirname(settings), exist_ok=True)
+        data = {}
+        if os.path.exists(settings):
+            try:
+                data = _json.load(open(settings))
+            except Exception:
+                data = {}
+            import shutil
+            shutil.copy(settings, settings + ".localmask.bak")
+            print(f"  {D}backed up existing settings → {settings}.localmask.bak{X}")
+        data.setdefault("env", {})["ANTHROPIC_BASE_URL"] = base
+        with open(settings, "w") as f:
+            _json.dump(data, f, indent=2)
+        print(f"  {G}✓ Claude Code configured{X} — {D}ANTHROPIC_BASE_URL={base} in {settings}{X}")
+        print(f"  {D}Restart Claude Code. Its traffic now passes through the masking proxy.{X}")
+    elif tool == "cursor":
+        print(f"  {B}Cursor:{X} Settings → Models → enable {C}Override OpenAI Base URL{X}")
+        print(f"    set it to  {C}{base}/v1{X}")
+        print(f"    (and/or Anthropic base URL to {C}{base}{X})")
+    elif tool == "codex":
+        print(f"  {B}Codex / OpenAI SDK:{X} export the env, then run your tool:")
+        print(f"    {C}source {env_path}{X}")
+    elif tool == "env":
+        print(f"  {B}Any tool:{X} {C}source {env_path}{X}  (sets ANTHROPIC_BASE_URL + OPENAI_BASE_URL)")
+
+    print(f"\n  {Y}Note:{X} put your real upstream API key in {cfg_path} — the tool")
+    print(f"  talks only to the local proxy; the proxy holds the key and masks first.\n")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SERVICE CLIENT — communicates with LocalMask cloud service
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1254,6 +1382,9 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     scan_p.add_argument("--credential-id", "-c", default="",
                         help="Credential ID from store-token (for private repos)")
     scan_p.add_argument("--org", default="default", help="Organization ID")
+    scan_p.add_argument("--fail-on-detection", "--strict-exit", dest="fail_on_detection",
+                        action="store_true",
+                        help="Exit non-zero if any secret is found (for pre-commit / CI gates)")
 
     # status
     status_p = sub.add_parser("status", help="Show scan status")
@@ -1347,6 +1478,11 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     # license
     sub.add_parser("license", help="Show current license tier and usage")
 
+    # check-updates — opt-in, network only when explicitly run (stays offline)
+    sub.add_parser("check-updates",
+                   help="Check localmaskpro.com for a newer version (opt-in; "
+                        "LocalMask never phones home on its own)")
+
     # feedback — works offline, no init/server needed
     fb_p = sub.add_parser("feedback",
                           help="Send feedback or report a bug (feedback@localmaskpro.com)")
@@ -1409,7 +1545,13 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     exp_p.add_argument("output_dir", help="Folder to write masked files into")
 
     proxy_p = sub.add_parser("proxy",
-                             help="Run the local AI proxy (prompt firewall, Pro)")
+                             help="Run the local AI proxy, or set up a tool to use it (Pro)")
+    proxy_p.add_argument("action", nargs="?", default="run",
+                         choices=["run", "setup"],
+                         help="'run' the proxy (default), or 'setup' a tool to route through it")
+    proxy_p.add_argument("tool", nargs="?", default="",
+                         choices=["", "claude-code", "cursor", "codex", "env"],
+                         help="For setup: which tool to configure")
     proxy_p.add_argument("--port", type=int, default=None,
                          help="Listen port (default 8100 or proxy.yaml)")
     proxy_p.add_argument("--use-model", action="store_true",
@@ -1430,11 +1572,11 @@ Enable per scan:   LOCALMASK_MONEY_MODE=<mode> localmask scan .
   bucket     $42,000 -> ~[AMOUNT_5D_USD_0]~      (order of magnitude only)  [PRO]
   token      $42,000 -> ~[AMOUNT_0]~             (full opacity)             [PRO]
 
-'relative' sends each amount as a ratio to a secret crypto-random base,
-one base per category (salary/revenue/price), generated locally and stored
-with 0600 permissions in ~/.localmask/money_keys.json. Absolute values,
-currency and scale are hidden; only in-category ratios are visible - that
-is the utility. AI answers are re-hydrated back to real numbers locally.
+'relative' sends each amount as a ratio to ONE secret crypto-random base
+per repo, generated locally and stored with 0600 permissions in
+~/.localmask/money_keys.json. Absolute values, currency and scale are
+hidden; the ratios between amounts are visible - that is the utility.
+AI answers are re-hydrated back to real numbers locally.
 
 The protection level is one uniform choice per scan: in relative mode
 everything is relative (uncategorized amounts use the generic R_AMOUNT
@@ -1452,6 +1594,9 @@ Full details: FINANCE.md""")
         return
 
     if args.command == "proxy":
+        if getattr(args, "action", "run") == "setup":
+            _proxy_setup(getattr(args, "tool", "") or "", args.port or 8100)
+            return
         if args.port:
             os.environ["LOCALMASK_PROXY_PORT"] = str(args.port)
         if getattr(args, "use_model", False):
@@ -1771,6 +1916,7 @@ Full details: FINANCE.md""")
                     print(f"    {t:28s} {RED}{count}{RESET}")
             print(f"\n  {DIM}Next:{RESET} localmask status  ·  "
                   f"localmask publish {scan_id} --target <git-url>")
+            _maybe_fail_on_detection(args, stats)
             return
 
         client = _get_client()
@@ -1808,6 +1954,7 @@ Full details: FINANCE.md""")
         print(f"    localmask review {scan_id}")
         print(f"    localmask approve-all {scan_id}")
         print(f"    localmask submit {scan_id}\n")
+        _maybe_fail_on_detection(args, stats)
 
     # ── status ──────────────────────────────────────────────────────────────
     elif args.command == "status":
@@ -2374,7 +2521,11 @@ fi
                 print(f"  {GREEN}✓ License activated!{RESET}")
                 print(f"  {DIM}Tier:{RESET}       {BOLD}{result['tier_name']}{RESET}")
                 print(f"  {DIM}Activated:{RESET}  {result['activated_at'][:19]}")
-                print(f"\n  {DIM}You now have full access to LocalMask Pro.{RESET}\n")
+                if result.get("updates_until"):
+                    print(f"  {DIM}Updates:{RESET}    included until {result['updates_until']}")
+                    print(f"\n  {DIM}{result.get('note', '')}{RESET}\n")
+                else:
+                    print(f"\n  {DIM}You now have full access to LocalMask Pro.{RESET}\n")
             else:
                 print(f"  {RED}✗ Activation failed: {result.get('error', 'unknown')}{RESET}\n")
         except ImportError:
@@ -2395,6 +2546,11 @@ fi
             print(f"  {DIM}License:{RESET}    {status['license_key']}")
             if status.get("activated_at"):
                 print(f"  {DIM}Activated:{RESET}  {status['activated_at'][:19]}")
+            if status.get("updates_until"):
+                print(f"  {DIM}Updates:{RESET}    included until {status['updates_until']} "
+                      f"(your versions are yours forever)")
+            if status.get("renewal_notice"):
+                print(f"  {YELLOW}{status['renewal_notice']}{RESET}")
             print(f"  {DIM}Custom rules:{RESET} {'Yes' if status['custom_rules'] else 'No'}")
             print(f"\n  {BOLD}Usage Today:{RESET}")
             for action, info in status.get("usage_today", {}).items():
@@ -2408,8 +2564,28 @@ fi
                     bar = f"{GREEN}∞{RESET}"
                 print(f"    {action:<8} {used:>3}/{limit_str:<10} {bar}")
             print(f"\n{'═' * 50}\n")
+            note = _update_notice()
+            if note:
+                print(f"  {YELLOW}{note}{RESET}\n")
         except ImportError:
             print(f"  {RED}✗ licensing.py not found.{RESET}\n")
+
+    # ── check-updates ────────────────────────────────────────────────────
+    elif args.command == "check-updates":
+        cur = _current_version()
+        print(f"  {DIM}Installed:{RESET} v{cur}")
+        latest, notes = _fetch_latest()
+        if not latest:
+            print(f"  {DIM}Couldn't reach localmaskpro.com (that's fine — "
+                  f"LocalMask works fully offline).{RESET}\n")
+        elif latest == cur:
+            print(f"  {GREEN}✓ You're on the latest version.{RESET}\n")
+        else:
+            print(f"  {YELLOW}⬆ v{latest} is available.{RESET}")
+            if notes:
+                print(f"  {DIM}{notes}{RESET}")
+            print(f"  {DIM}Pro: re-download from your purchase link (covered "
+                  f"by your update window). Free: pip install -U localmask.{RESET}\n")
 
     # ── ask ──────────────────────────────────────────────────────────────
     elif args.command == "ask":

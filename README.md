@@ -186,6 +186,46 @@ localmask hook <scan_id>        # install a git hook to auto-sync on commit
 
 Unchanged secrets keep the same placeholder across syncs; new secrets get new ones.
 
+## Stop secrets before they land — CI & pre-commit
+
+`localmask scan . --fail-on-detection` exits non-zero when it finds a secret, so
+it drops straight into any gate.
+
+**Pre-commit** — add to `.pre-commit-config.yaml` (spreads across a team with one line):
+
+```yaml
+repos:
+  - repo: https://github.com/sgury/localmask
+    rev: v0.9.3
+    hooks:
+      - id: localmask
+```
+
+**GitHub Action** — fail a PR that introduces a secret (`.github/workflows/localmask.yml`):
+
+```yaml
+name: LocalMask
+on: [pull_request]
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sgury/localmask@v0.9.3
+```
+
+Both run 100% locally on the runner — nothing leaves it.
+
+## Route your AI tool through the masking proxy (Pro)
+
+One command points Claude Code / Cursor at the local proxy, so prompts are masked
+on your machine before anything is sent to the AI (or to your org's AI gateway):
+
+```bash
+localmask proxy setup claude-code   # or: cursor · codex · env
+localmask proxy                     # start it (Pro)
+```
+
 ## Git integrations — all the ways
 
 | Integration | Command | What it does |

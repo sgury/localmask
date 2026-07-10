@@ -1,12 +1,24 @@
 """
 LocalMask Pro — License Management & Code Protection.
 
-Offline-first licensing with HMAC-validated keys.
-No mandatory phone-home. Free tier works without any key.
+Offline-first licensing. No mandatory phone-home. Free tier works without
+any key.
 
-License key format: LM-{TIER}-{random_hex(16)}-{checksum_hex(4)}
+LM2 key format (current): LM2.{b64url(payload_json)}.{b64url(ed25519_sig)}
+  The payload is signed with a private key that exists ONLY on the license
+  server; the public key ships below. Validation is fully offline and stays
+  safe even with complete source access (Kerckhoffs): without the private
+  key no one can mint a valid license.
+  Semantics are perpetual-with-update-window: the license is valid forever
+  on every build whose RELEASE_DATE is within the buyer's updates_until.
+
+Legacy format: LM-{TIER}-{random_hex(16)}-[{expYYYYMMDD}-]{checksum_hex(4)}
+  HMAC with an embedded (public) secret — forgeable by design, so it is
+  accepted only when LOCALMASK_ACCEPT_LEGACY_KEYS=1 (dev/test trees).
+
 Storage: ~/.localmask/license.json, ~/.localmask/usage.json
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -25,9 +37,14 @@ LICENSE_DIR = os.path.expanduser("~/.localmask")
 LICENSE_FILE = os.path.join(LICENSE_DIR, "license.json")
 USAGE_FILE = os.path.join(LICENSE_DIR, "usage.json")
 
-# Signing secret for HMAC checksum validation (embedded, not a real secret —
-# this is client-side validation only, not meant to be tamper-proof)
+# Legacy HMAC secret (embedded → public → forgeable). Kept only so dev trees
+# can keep using old keys behind LOCALMASK_ACCEPT_LEGACY_KEYS=1.
 _SIGNING_SECRET = b"localmask-pro-2026-offline-license-validation"
+
+# LM2: Ed25519 public verification key (raw 32 bytes, base64). The matching
+# private key never ships — it lives only on the license server.
+# LOCALMASK_LICENSE_PUBKEY overrides for dev/test trees.
+_LM2_PUBKEY_B64 = "ONCTL67acgV/VBPM2yXk+qx6EJRp2K9LSHN2O22cLXc="
 
 # Tier definitions — monthly limits
 # Free tier: 10 scans & 10 asks in the first month, then 3/month after
@@ -143,6 +160,72 @@ def _machine_id() -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
+# ── LM2 (Ed25519-signed) keys ────────────────────────────────────────────────
+
+def _legacy_keys_ok() -> bool:
+    return os.environ.get("LOCALMASK_ACCEPT_LEGACY_KEYS", "") == "1"
+
+
+def _b64u_decode(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def _validate_lm2(key: str) -> tuple:
+    """Verify an LM2.{payload}.{sig} key. Returns (valid, tier, error, payload).
+
+    payload: {"t": tier, "i": issued YYYYMMDD, "u": updates_until YYYYMMDD,
+              "s": seats, "n": nonce}
+    """
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.exceptions import InvalidSignature
+    except ImportError:
+        return False, "", ("License validation needs the 'cryptography' package "
+                           "— pip install cryptography"), {}
+    parts = key.strip().split(".")
+    if len(parts) != 3 or parts[0] != "LM2":
+        return False, "", "Invalid key format", {}
+    try:
+        payload_raw = _b64u_decode(parts[1])
+        sig = _b64u_decode(parts[2])
+        pub = base64.b64decode(
+            os.environ.get("LOCALMASK_LICENSE_PUBKEY", _LM2_PUBKEY_B64))
+        Ed25519PublicKey.from_public_bytes(pub).verify(sig, payload_raw)
+        payload = json.loads(payload_raw)
+    except InvalidSignature:
+        return False, "", "Invalid license signature", {}
+    except Exception:
+        return False, "", "Malformed license key", {}
+    tier = str(payload.get("t", "")).lower()
+    upd = str(payload.get("u", ""))
+    if tier not in TIERS or tier == "free":
+        return False, "", f"Unknown tier: {tier}", {}
+    if not (len(upd) == 8 and upd.isdigit()):
+        return False, "", "Malformed update window", {}
+    return True, tier, "", payload
+
+
+def _release_date() -> str:
+    """This build's release date (YYYYMMDD), baked by build-dist.sh.
+    Empty in the dev tree → every license covers it."""
+    rd = os.environ.get("LOCALMASK_RELEASE_DATE", "")
+    if rd:
+        return rd
+    try:
+        from localmask._edition import RELEASE_DATE
+        return RELEASE_DATE or ""
+    except Exception:
+        return ""
+
+
+def _build_covered(updates_until: str) -> bool:
+    """A license covers this build iff the build was released within the
+    buyer's update window. Wall-clock time is irrelevant: what you bought
+    keeps working forever."""
+    rd = _release_date()
+    return (not rd) or rd <= updates_until
+
+
 # ── License Manager ──────────────────────────────────────────────────────────
 
 class LicenseManager:
@@ -155,9 +238,26 @@ class LicenseManager:
 
     @property
     def tier(self) -> str:
-        """Current tier name. An expired annual license falls back to free
-        (offline check, with a short grace window)."""
-        tier = self._license.get("tier", "free")
+        """Current tier name, re-validated from the stored key on every load —
+        a hand-edited license.json (tier: pro, no valid key) resolves to free.
+
+        LM2 keys: perpetual on covered builds (RELEASE_DATE ≤ updates_until);
+        a build released after the window resolves to free.
+        Legacy LM- keys: dev/test only (LOCALMASK_ACCEPT_LEGACY_KEYS=1),
+        wall-clock expiry + grace as before."""
+        key = self._license.get("license_key", "")
+        if not key:
+            return "free"
+        if key.startswith("LM2."):
+            valid, tier, _err, payload = _validate_lm2(key)
+            if not valid or not _build_covered(str(payload.get("u", ""))):
+                return "free"
+            return tier
+        if not _legacy_keys_ok():
+            return "free"
+        valid, tier, _err, _exp = _validate_key_format(key)
+        if not valid:
+            return "free"
         if tier != "free" and self._is_expired():
             return "free"
         return tier
@@ -194,7 +294,16 @@ class LicenseManager:
     # ── Activation ───────────────────────────────────────────────────────
 
     def activate(self, license_key: str) -> dict:
-        """Activate a license key. Validates format (and expiry) locally."""
+        """Activate a license key. Fully offline validation."""
+        license_key = license_key.strip()
+        if license_key.startswith("LM2."):
+            return self._activate_lm2(license_key)
+
+        # Legacy LM- keys: dev/test trees only.
+        if not _legacy_keys_ok():
+            return {"ok": False, "error": (
+                "This key uses the old format and can no longer be activated. "
+                "Contact hello@localmaskpro.com for a replacement key.")}
         valid, tier, error, expires_at = _validate_key_format(license_key)
         if not valid:
             return {"ok": False, "error": error}
@@ -218,6 +327,43 @@ class LicenseManager:
             "tier_name": TIERS[tier]["name"],
             "activated_at": now,
             "expires_at": expires_at or "perpetual",
+        }
+
+    def _activate_lm2(self, license_key: str) -> dict:
+        valid, tier, error, payload = _validate_lm2(license_key)
+        if not valid:
+            return {"ok": False, "error": error}
+        upd = str(payload.get("u", ""))
+        upd_pretty = f"{upd[:4]}-{upd[4:6]}-{upd[6:]}"
+        if not _build_covered(upd):
+            rd = _release_date()
+            rd_pretty = f"{rd[:4]}-{rd[4:6]}-{rd[6:]}"
+            return {"ok": False, "error": (
+                f"This license includes updates until {upd_pretty}, but this "
+                f"version was released {rd_pretty}. Your license keeps working "
+                f"forever on versions released within your window — download "
+                f"one from your purchase link, or renew at "
+                f"https://localmaskpro.com for the latest.")}
+        now = datetime.now(timezone.utc).isoformat()
+        self._license = {
+            "license_key": license_key,
+            "kind": "lm2",
+            "tier": tier,
+            "activated_at": now,
+            "last_validated": now,
+            "updates_until": upd,
+            "seats": int(payload.get("s", 1) or 1),
+            "machine_id": _machine_id(),
+        }
+        self._save_license()
+        return {
+            "ok": True,
+            "tier": tier,
+            "tier_name": TIERS[tier]["name"],
+            "activated_at": now,
+            "updates_until": upd_pretty,
+            "note": ("Perpetual license: every version released before "
+                     f"{upd_pretty} is yours forever."),
         }
 
     def deactivate(self) -> dict:
@@ -325,7 +471,20 @@ class LicenseManager:
             "usage_this_month": limits,
             "billing_period": "annual",
         }
-        if days_left is not None and days_left <= 30:
+        if self._license.get("kind") == "lm2":
+            upd = self._license.get("updates_until", "")
+            upd_pretty = f"{upd[:4]}-{upd[4:6]}-{upd[6:]}" if len(upd) == 8 else upd
+            status["billing_period"] = "one-time"
+            status["license_model"] = (
+                f"Perpetual — versions released before {upd_pretty} are "
+                f"yours forever; updates included until {upd_pretty}.")
+            status["updates_until"] = upd_pretty
+            if not _build_covered(upd):
+                status["renewal_notice"] = (
+                    f"This version was released after your update window "
+                    f"({upd_pretty}) — running as Free. Use a version from "
+                    f"your purchase link, or renew at https://localmaskpro.com.")
+        elif days_left is not None and days_left <= 30:
             status["renewal_notice"] = (
                 f"Your license expires in {days_left} days — renew at "
                 f"https://localmaskpro.com to keep Pro features.")
@@ -403,7 +562,18 @@ class LicenseManager:
     def activate_with_org(self, license_key: str, server_url: str, org_name: str = "") -> dict:
         """Activate a license key and register with an org server."""
         # First validate locally
-        valid, tier, error, _expires_at = _validate_key_format(license_key)
+        license_key = license_key.strip()
+        if license_key.startswith("LM2."):
+            valid, tier, error, payload = _validate_lm2(license_key)
+            if valid and not _build_covered(str(payload.get("u", ""))):
+                valid, error = False, "License update window predates this version."
+        else:
+            if not _legacy_keys_ok():
+                return {"ok": False, "error": (
+                    "This key uses the old format and can no longer be "
+                    "activated. Contact hello@localmaskpro.com for a "
+                    "replacement key.")}
+            valid, tier, error, _expires_at = _validate_key_format(license_key)
         if not valid:
             return {"ok": False, "error": error}
 
@@ -433,6 +603,9 @@ class LicenseManager:
             "org_server": server_url.rstrip("/"),
             "org_name": org_name or data.get("org", ""),
         }
+        if license_key.startswith("LM2."):
+            self._license["kind"] = "lm2"
+            self._license["updates_until"] = str(payload.get("u", ""))
         self._save_license()
         return {
             "ok": True,

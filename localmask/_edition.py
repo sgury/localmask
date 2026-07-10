@@ -14,8 +14,16 @@ license-gated (single-tree dev). `capabilities()` reconciles both.
 """
 import os
 
-# Overwritten at build time by build-dist.sh. Env var wins for dev/testing.
-EDITION = os.environ.get("LOCALMASK_EDITION", "free")
+# Overwritten at build time by build-dist.sh. In the dev tree the env var
+# wins for testing; DIST BUILDS GET A LITERAL "free" WITH NO ENV OVERRIDE —
+# paid capabilities unlock only through an activated (signed) license.
+EDITION = os.environ.get("LOCALMASK_EDITION", "pro")
+
+# Baked at build time. RELEASE_DATE (YYYYMMDD) anchors the perpetual-license
+# update window: an LM2 license covers this build iff RELEASE_DATE falls
+# inside the license's updates_until. Empty in the dev tree.
+VERSION = "dev"
+RELEASE_DATE = ""
 
 # Capability → minimum edition that includes it.
 _CAP_MIN_EDITION = {
@@ -57,16 +65,34 @@ def _license_tier() -> str:
 
 
 def edition() -> str:
-    """Effective edition = max(build-time floor, activated license tier)."""
+    """Effective edition = max(build-time floor, activated license tier).
+
+    This is a DISPLAY value only. Paid capability authorization does NOT use
+    it — see `has_capability`/`_authorized_tier`."""
     lic = _license_tier()
     return EDITION if _ORDER.get(EDITION, 0) >= _ORDER.get(lic, 0) else lic
 
 
+def _authorized_tier(need: str) -> str:
+    """Tier that authorizes a capability requiring `need`.
+
+    Free capabilities ride the baked edition floor (no license required).
+    PAID capabilities (pro/team/ent) authorize ONLY on a valid, signed
+    license tier (`_license_tier()` — Ed25519, unforgeable). The baked
+    EDITION flag can *lower* capability but can never *raise* it, so editing
+    `EDITION = "free"` -> `"pro"` in the shipped source unlocks nothing.
+    Bypassing this now requires tampering with the signature check itself,
+    not flipping a flag."""
+    if _ORDER.get(need, 1) <= _ORDER["free"]:
+        return edition()
+    return _license_tier()
+
+
 def has_capability(cap: str) -> bool:
-    """True if the current effective edition includes `cap` AND the source
-    for it is actually present (a free build physically lacks Pro files)."""
+    """True if a capability is authorized for the current tier AND its source
+    is actually present (a free build physically lacks Pro files)."""
     need = _CAP_MIN_EDITION.get(cap, "pro")
-    if _ORDER.get(edition(), 0) < _ORDER.get(need, 1):
+    if _ORDER.get(_authorized_tier(need), 0) < _ORDER.get(need, 1):
         return False
     # Guard against a license claiming a tier whose files weren't shipped.
     return _source_present(cap)
@@ -97,8 +123,8 @@ def require(cap: str) -> None:
     if not has_capability(cap):
         need = _CAP_MIN_EDITION.get(cap, "pro")
         raise PermissionError(
-            f"'{cap}' is a {need.upper()} feature — this is the "
-            f"{EDITION.upper()} edition. Upgrade at https://localmaskpro.com "
+            f"'{cap}' is a {need.upper()} feature — you're running as "
+            f"{edition().upper()}. Upgrade at https://localmaskpro.com "
             f"(activate a license key with `localmask activate <key>`)."
         )
 
@@ -106,5 +132,5 @@ def require(cap: str) -> None:
 def upgrade_notice(cap: str) -> str:
     need = _CAP_MIN_EDITION.get(cap, "pro")
     return (f"⚡ {cap} requires the {need.upper()} edition. "
-            f"You're on {EDITION.upper()} (regex engine, 100% local). "
+            f"You're running as {edition().upper()} (regex engine, 100% local). "
             f"Upgrade: https://localmaskpro.com")
