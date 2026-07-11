@@ -107,6 +107,31 @@ def _maybe_fail_on_detection(args, stats):
         sys.exit(1)
 
 
+def _scan_git_history(eng, src_dir, stats):
+    """Scan the repo's git history for secrets that were committed then removed
+    but still live in the git log — the biggest recall gap a working-tree scan
+    misses. Mutates `stats` so --fail-on-detection also gates on history hits."""
+    print(f"\n  {CYAN}[HISTORY]{RESET} Scanning git history for removed-but-committed "
+          f"secrets...", flush=True)
+    try:
+        hits = eng.scan_history(src_dir)
+    except Exception as e:
+        print(f"  {DIM}(git-history scan skipped: {str(e)[:120]}){RESET}")
+        return
+    if not hits:
+        print(f"  {GREEN}✓ No secrets found in git history that were removed "
+              f"from the current tree.{RESET}")
+        return
+    print(f"  {RED}✗ {len(hits)} secret(s) live in git history but are GONE from "
+          f"the working tree:{RESET}\n")
+    for h in hits:
+        print(f"    {RED}✗{RESET} {h['type']:28s} {DIM}blob {h['blob']}{RESET}")
+    print(f"\n  {DIM}These are invisible to a normal scan. Purge them with "
+          f"git filter-repo / BFG and rotate the credentials.{RESET}")
+    # Roll history hits into the fail-gate count.
+    stats["total_detections"] = (stats or {}).get("total_detections", 0) + len(hits)
+
+
 def _proxy_setup(tool: str, port: int):
     """Point a dev tool at the local masking proxy in one command.
 
@@ -1393,6 +1418,9 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     scan_p.add_argument("--fail-on-detection", "--strict-exit", dest="fail_on_detection",
                         action="store_true",
                         help="Exit non-zero if any secret is found (for pre-commit / CI gates)")
+    scan_p.add_argument("--history", action="store_true",
+                        help="Also scan git history for secrets that were committed "
+                             "then removed (still live in the repo's git log)")
 
     # status
     status_p = sub.add_parser("status", help="Show scan status")
@@ -1929,6 +1957,8 @@ Full details: FINANCE.md""")
                     print(f"    {t:28s} {RED}{count}{RESET}")
             print(f"\n  {DIM}Next:{RESET} localmask status  ·  "
                   f"localmask publish {scan_id} --target <git-url>")
+            if getattr(args, "history", False):
+                _scan_git_history(eng, os.path.expanduser(args.repo_url), stats)
             _maybe_fail_on_detection(args, stats)
             return
 

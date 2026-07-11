@@ -174,6 +174,70 @@ class LocalMaskEngine:
                files=len(session.get("files", {})), detections=len(detections))
         return _scan_to_dict(scan_record)
 
+    # ── Git-history scan ───────────────────────────────────────────────────
+
+    def scan_history(self, src_dir: str, exclude_values=None, max_blobs: int = 4000):
+        """Scan EVERY version of every file ever committed (all git blobs) for
+        secrets — catching credentials that were committed and later removed but
+        still live in history. Returns findings whose value is NOT in the
+        current working tree (i.e. the ones a working-tree scan misses).
+
+        `exclude_values`: set of secret values already found in the working tree.
+        """
+        import subprocess
+        git = ["git", "-C", src_dir]
+        if subprocess.run(git + ["rev-parse", "--git-dir"],
+                          capture_output=True).returncode != 0:
+            return []  # not a git repo
+        session = _new_session(src_dir, False)
+        session["sensitivity"] = "standard"
+
+        def _cat(h):
+            return subprocess.run(git + ["cat-file", "-p", h],
+                                  capture_output=True, text=True, errors="ignore").stdout
+
+        # Build the exclude set: secrets that live in the CURRENT tree (HEAD).
+        # A history hit that also exists at HEAD is not "removed" — skip it so we
+        # only surface credentials that were committed then deleted.
+        exclude = set(exclude_values or [])
+        if exclude_values is None:
+            head = subprocess.run(git + ["ls-tree", "-r", "HEAD", "--format=%(objecttype) %(objectname) %(objectsize)"],
+                                  capture_output=True, text=True)
+            for ln in head.stdout.splitlines():
+                parts = ln.split()
+                if len(parts) == 3 and parts[0] == "blob" and int(parts[2]) < 500_000:
+                    content = _cat(parts[1])
+                    if not content or "\x00" in content[:1024]:
+                        continue
+                    for d in _scan_file(session, content, f"[head]/{parts[1][:10]}").get("findings", []):
+                        exclude.add(str(d.get("value", "")))
+
+        # All blob objects (every historical file version), with type+size.
+        listing = subprocess.run(
+            git + ["cat-file", "--batch-all-objects", "--batch-check=%(objecttype) %(objectname) %(objectsize)"],
+            capture_output=True, text=True)
+        blobs = []
+        for ln in listing.stdout.splitlines():
+            parts = ln.split()
+            if len(parts) == 3 and parts[0] == "blob" and int(parts[2]) < 500_000:
+                blobs.append(parts[1])
+        blobs = blobs[:max_blobs]
+        seen, findings = set(), []
+        for h in blobs:
+            content = _cat(h)
+            if not content or "\x00" in content[:1024]:
+                continue
+            res = _scan_file(session, content, f"[history]/{h[:10]}")
+            for d in res.get("findings", []):
+                v = str(d.get("value", ""))
+                if len(v) < 6 or v in exclude or v in seen:
+                    continue
+                seen.add(v)
+                findings.append({"value": v,
+                                 "type": d.get("subtype") or d.get("source") or "secret",
+                                 "blob": h[:10]})
+        return findings
+
     # ── Sync (re-scan on git update) ───────────────────────────────────────
 
     def sync_repo(self, scan_id: str, credential_id: str = "",
