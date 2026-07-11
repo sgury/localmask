@@ -29,7 +29,7 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from urllib.request import Request, urlopen
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -577,19 +577,28 @@ class LicenseManager:
         if not valid:
             return {"ok": False, "error": error}
 
-        # Validate with org server
+        # Validate with org server (also allocates/enforces a seat).
         try:
-            payload = json.dumps({"license_key": license_key}).encode()
+            body = json.dumps({"license_key": license_key}).encode()
             req = Request(
                 f"{server_url.rstrip('/')}/api/validate",
-                data=payload,
-                headers={"Content-Type": "application/json", "X-License-Key": license_key},
+                data=body,
+                headers={"Content-Type": "application/json",
+                         "X-License-Key": license_key,
+                         "X-Machine-Id": _machine_id(),
+                         "X-User-Email": os.environ.get("LOCALMASK_USER_EMAIL", "")},
                 method="POST",
             )
             resp = urlopen(req, timeout=10)
             data = json.loads(resp.read())
             if not data.get("valid"):
                 return {"ok": False, "error": data.get("error", "Server rejected key")}
+        except HTTPError as e:
+            try:
+                msg = json.loads(e.read()).get("detail", "")
+            except Exception:
+                msg = ""
+            return {"ok": False, "error": msg or f"Server rejected activation ({e.code})"}
         except URLError as e:
             return {"ok": False, "error": f"Cannot reach org server: {e}"}
 
