@@ -25,6 +25,42 @@
       "level": "minimal",
       "reason": "GitHub token"
     },
+    "digitalocean_pat": {
+      "pattern": "(?<![A-Za-z0-9])dop_v1_[a-f0-9]{64}(?![a-f0-9])",
+      "confidence": 0.99, "level": "minimal", "reason": "DigitalOcean personal access token"
+    },
+    "gitlab_incoming_mail_token": {
+      "pattern": "(?<![A-Za-z0-9])glimt-[0-9a-zA-Z_-]{25}(?![0-9a-zA-Z_-])",
+      "confidence": 0.98, "level": "minimal", "reason": "GitLab incoming mail token"
+    },
+    "gitlab_runner_token": {
+      "pattern": "(?<![A-Za-z0-9])glrt-t\\d_[0-9a-zA-Z_-]{27,}",
+      "confidence": 0.98, "level": "minimal", "reason": "GitLab runner authentication token"
+    },
+    "gitlab_scim_token": {
+      "pattern": "(?<![A-Za-z0-9])glsoat-[0-9a-zA-Z_-]{20}(?![0-9a-zA-Z_-])",
+      "confidence": 0.98, "level": "minimal", "reason": "GitLab SCIM token"
+    },
+    "heroku_api_key_v2": {
+      "pattern": "(?<![A-Za-z0-9])HRKU-AA[0-9a-zA-Z_-]{58}",
+      "confidence": 0.98, "level": "minimal", "reason": "Heroku API key (v2)"
+    },
+    "clojars_api_token": {
+      "pattern": "(?i)(?<![A-Za-z0-9])CLOJARS_[a-z0-9]{60}",
+      "confidence": 0.99, "level": "minimal", "reason": "Clojars API token"
+    },
+    "linear_api_key": {
+      "pattern": "(?<![A-Za-z0-9])lin_api_[a-zA-Z0-9]{40}(?![a-zA-Z0-9])",
+      "confidence": 0.99, "level": "minimal", "reason": "Linear API key"
+    },
+    "airtable_pat": {
+      "pattern": "(?<![A-Za-z0-9])pat[a-zA-Z0-9]{14}\\.[a-f0-9]{64}(?![a-f0-9])",
+      "confidence": 0.98, "level": "minimal", "reason": "Airtable personal access token"
+    },
+    "hashicorp_tf_token": {
+      "pattern": "(?<![A-Za-z0-9])[a-z0-9]{14}\\.atlasv1\\.[a-zA-Z0-9_=-]{60,70}",
+      "confidence": 0.98, "level": "minimal", "reason": "HashiCorp Terraform Cloud token"
+    },
     "anthropic_key": {
       "pattern": "(?<![A-Za-z0-9])sk-ant-[a-zA-Z0-9\\-_]{20,}",
       "confidence": 0.99,
