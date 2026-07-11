@@ -1480,8 +1480,13 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
                        help="If creating the masked repo, make it public (default: private)")
 
     # activate
-    act_p = sub.add_parser("activate", help="Activate a LocalMask Pro license key")
-    act_p.add_argument("license_key", help="License key (format: LM-TIER-key-checksum)")
+    act_p = sub.add_parser("activate", help="Activate a LocalMask license key")
+    act_p.add_argument("license_key", help="License key (LM2.…)")
+    act_p.add_argument("--server", default="",
+                       help="Organization server URL (required for Team/Enterprise "
+                            "keys; allocates your seat). Or set LOCALMASK_SERVER.")
+    act_p.add_argument("--email", default="",
+                       help="Your work email (recorded on the seat)")
 
     # license
     sub.add_parser("license", help="Show current license tier and usage")
@@ -2519,21 +2524,29 @@ fi
 
     # ── activate ────────────────────────────────────────────────────────
     elif args.command == "activate":
-        # License activation is local — no server needed
+        # Pro: offline. Team/Enterprise: against the org server (seat allocation).
         sys.path.insert(0, os.path.dirname(__file__))
         try:
             from licensing import LicenseManager
             mgr = LicenseManager()
-            result = mgr.activate(args.license_key)
+            server = args.server or os.environ.get("LOCALMASK_SERVER", "")
+            if args.email:
+                os.environ["LOCALMASK_USER_EMAIL"] = args.email
+            if server:
+                result = mgr.activate_with_org(args.license_key, server, org_name="")
+            else:
+                result = mgr.activate(args.license_key)
             if result.get("ok"):
                 print(f"  {GREEN}✓ License activated!{RESET}")
                 print(f"  {DIM}Tier:{RESET}       {BOLD}{result['tier_name']}{RESET}")
+                if result.get("org_name") or server:
+                    print(f"  {DIM}Org server:{RESET} {result.get('org_server', server)}")
                 print(f"  {DIM}Activated:{RESET}  {result['activated_at'][:19]}")
                 if result.get("updates_until"):
                     print(f"  {DIM}Updates:{RESET}    included until {result['updates_until']}")
                     print(f"\n  {DIM}{result.get('note', '')}{RESET}\n")
                 else:
-                    print(f"\n  {DIM}You now have full access to LocalMask Pro.{RESET}\n")
+                    print(f"\n  {DIM}You now have full access.{RESET}\n")
             else:
                 print(f"  {RED}✗ Activation failed: {result.get('error', 'unknown')}{RESET}\n")
         except ImportError:

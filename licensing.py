@@ -252,6 +252,13 @@ class LicenseManager:
             valid, tier, _err, payload = _validate_lm2(key)
             if not valid or not _build_covered(str(payload.get("u", ""))):
                 return "free"
+            # Team/Enterprise licenses only grant their tier when they were
+            # activated against the org server (a seat was allocated). A key
+            # dropped in offline, or activated with plain `activate`, has no
+            # org_server → it grants nothing until it's org-activated. Once
+            # seated, org_server is stored so the member still works offline.
+            if tier in ("team", "ent") and not self._license.get("org_server"):
+                return "free"
             return tier
         if not _legacy_keys_ok():
             return "free"
@@ -333,6 +340,15 @@ class LicenseManager:
         valid, tier, error, payload = _validate_lm2(license_key)
         if not valid:
             return {"ok": False, "error": error}
+        # Team/Enterprise licenses are seat-enforced: they must be activated
+        # against the organization's server, which allocates a seat. Refuse the
+        # plain offline path so a shared key can't skip the seat count.
+        if tier in ("team", "ent"):
+            return {"ok": False, "error": (
+                f"{tier.upper()} licenses activate against your organization's "
+                f"server (this allocates your seat):\n"
+                f"    localmask activate <key> --server https://your-org-server\n"
+                f"Ask your admin for the server URL.")}
         upd = str(payload.get("u", ""))
         upd_pretty = f"{upd[:4]}-{upd[4:6]}-{upd[6:]}"
         if not _build_covered(upd):
