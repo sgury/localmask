@@ -105,6 +105,18 @@
       "pattern": "(?i)cloudflare[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-f0-9]{37})(?![a-f0-9])",
       "confidence": 0.92, "level": "minimal", "reason": "Cloudflare global API key (keyword-anchored)"
     },
+    "notion_token": {
+      "pattern": "(?<![A-Za-z0-9_])secret_[A-Za-z0-9]{43}(?![A-Za-z0-9])",
+      "confidence": 0.97, "level": "minimal", "reason": "Notion integration token"
+    },
+    "mailgun_api_key": {
+      "pattern": "(?<![A-Za-z0-9])key-[a-z0-9]{32}(?![a-z0-9])",
+      "confidence": 0.95, "level": "minimal", "reason": "Mailgun API key"
+    },
+    "figma_pat": {
+      "pattern": "(?<![A-Za-z0-9])figd_[A-Za-z0-9_-]{40,}",
+      "confidence": 0.98, "level": "minimal", "reason": "Figma personal access token"
+    },
     "anthropic_key": {
       "pattern": "(?<![A-Za-z0-9])sk-ant-[a-zA-Z0-9\\-_]{20,}",
       "confidence": 0.99,
