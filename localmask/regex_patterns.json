@@ -129,6 +129,36 @@
       "level": "minimal",
       "reason": "OpenAI API key"
     },
+    "openai_project_key": {
+      "pattern": "(?<![A-Za-z0-9])sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}",
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "OpenAI project / service-account / admin API key"
+    },
+    "okta_api_token": {
+      "pattern": "(?<![A-Za-z0-9])SSWS\\s+[A-Za-z0-9_=-]{20,}",
+      "confidence": 0.95,
+      "level": "minimal",
+      "reason": "Okta API token (SSWS scheme)"
+    },
+    "groq_api_key": {
+      "pattern": "(?<![A-Za-z0-9])gsk_[A-Za-z0-9]{52}(?![A-Za-z0-9])",
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Groq API key"
+    },
+    "perplexity_api_key": {
+      "pattern": "(?<![A-Za-z0-9])pplx-[A-Za-z0-9]{48}(?![A-Za-z0-9])",
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Perplexity API key"
+    },
+    "sentry_auth_token": {
+      "pattern": "(?<![A-Za-z0-9])sntry[su]_[A-Za-z0-9]{60,}",
+      "confidence": 0.92,
+      "level": "minimal",
+      "reason": "Sentry auth token"
+    },
     "google_api_key": {
       "pattern": "(?<![A-Za-z0-9])AIza[0-9A-Za-z\\-_]{35}(?![0-9A-Za-z\\-_])",
       "confidence": 0.99,
@@ -660,10 +690,10 @@
       "reason": "pypi upload token"
     },
     "doppler_token": {
-      "pattern": "\\bdp\\.pt\\.[a-zA-Z0-9]{43}\\b",
+      "pattern": "\\bdp\\.(?:pt|st|sa|ct|scim|audit)\\.[a-zA-Z0-9]{40,44}\\b",
       "confidence": 0.98,
       "level": "standard",
-      "reason": "doppler token"
+      "reason": "doppler token (personal/service/service-account/CLI)"
     },
     "digitalocean_pat": {
       "pattern": "\\bdop_v1_[a-f0-9]{64}\\b",
