@@ -51,3 +51,32 @@ def test_existing_vendors_not_stolen_by_new_rules():
     # sk-ant- must stay anthropic; legacy sk-[48] must stay openai_key.
     assert _types("sk-ant-api03-" + _filler("ant", 80)) == ["anthropic_key"]
     assert _types("sk-" + _filler("legacy", 48)) == ["openai_key"]
+
+
+def _hexf(name, ln):
+    """Deterministic lowercase-hex filler for hex-format vendor tokens."""
+    h = hashlib.sha256(name.encode()).hexdigest()
+    return (h * 3)[:ln]
+
+
+def _scan_code(code):
+    s = _new_session(".", False)
+    s["sensitivity"] = "standard"
+    r = _scan_file(s, code, "x.py")
+    return sorted({d.get("subtype") for d in r.get("findings", [])})
+
+
+# Keyword-anchored vendors: the rule fires only when the vendor keyword is near
+# the token, and it extracts the capture group (token only) — verify both.
+KW = {
+    "vercel_token": f'VERCEL_TOKEN = "{_filler("vercel", 24)}"',
+    "fastly_api_token": f'FASTLY_API_TOKEN = "{_filler("fastly", 32)}"',
+    "linode_token": f'LINODE_TOKEN = "{_hexf("linode", 64)}"',
+    "kraken_api_key": f'KRAKEN_API_KEY = "{_filler("kraken", 54)}=="',
+    "etsy_keystring": f'ETSY_KEYSTRING = "{_hexf("etsy", 24)}"',
+}
+
+
+def test_keyword_anchored_vendors_type_as_themselves():
+    for expected, code in KW.items():
+        assert _scan_code(code) == [expected], f"{expected}: {_scan_code(code)}"

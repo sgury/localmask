@@ -159,6 +159,36 @@
       "level": "minimal",
       "reason": "Sentry auth token"
     },
+    "vercel_token": {
+      "pattern": "(?i)vercel[\\w.\\-]{0,25}['\"\\s:=]{1,4}([A-Za-z0-9]{24})(?![A-Za-z0-9])",
+      "confidence": 0.88,
+      "level": "minimal",
+      "reason": "Vercel API token (keyword-anchored)"
+    },
+    "fastly_api_token": {
+      "pattern": "(?i)fastly[\\w.\\-]{0,25}['\"\\s:=]{1,4}([A-Za-z0-9_-]{32})(?![A-Za-z0-9_-])",
+      "confidence": 0.88,
+      "level": "minimal",
+      "reason": "Fastly API token (keyword-anchored)"
+    },
+    "linode_token": {
+      "pattern": "(?i)linode[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-f0-9]{64})(?![a-f0-9])",
+      "confidence": 0.88,
+      "level": "minimal",
+      "reason": "Linode personal access token (keyword-anchored)"
+    },
+    "kraken_api_key": {
+      "pattern": "(?i)kraken[\\w.\\-]{0,25}['\"\\s:=]{1,4}([A-Za-z0-9+/=]{56,88})(?![A-Za-z0-9+/=])",
+      "confidence": 0.88,
+      "level": "minimal",
+      "reason": "Kraken API key (keyword-anchored)"
+    },
+    "etsy_keystring": {
+      "pattern": "(?i)etsy[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-z0-9]{24})(?![a-z0-9])",
+      "confidence": 0.88,
+      "level": "minimal",
+      "reason": "Etsy keystring (keyword-anchored)"
+    },
     "google_api_key": {
       "pattern": "(?<![A-Za-z0-9])AIza[0-9A-Za-z\\-_]{35}(?![0-9A-Za-z\\-_])",
       "confidence": 0.99,
