@@ -81,8 +81,11 @@ misclassified into another category):
 - Keyword-anchored: Dropbox, Discord, DroneCI, Codecov, HubSpot, Intercom,
   Bitbucket client-id, Cloudflare global.
 
-Still open (keyword-context, higher FP — add carefully): Auth0, Snowflake,
-Vercel, Fastly, Linode, Kraken, Etsy. (JWT already caught as `jwt_token`.)
+Still open: **Auth0** and **Snowflake** are already caught generically (Auth0
+client secret → `oauth2_client_secret`; Snowflake password → `password_assignment`)
+— a vendor-specific rule loses to the generic one and adds nothing, so left as-is.
+(JWT already caught as `jwt_token`.) The keyword-context vendors Vercel / Fastly /
+Linode / Kraken / Etsy are now CLOSED — see below.
 
 ### Modern-vendor pass (2026-07-11, commits 5181bba canonical / 25a124d OSS)
 Re-audited with CANONICAL-LENGTH tokens (the earlier synthetic tokens were the
@@ -102,6 +105,19 @@ artifact, not a real miss). True misses found and closed, all distinctive-prefix
 LESSON: always re-test vendor coverage with a CANONICAL-length token — a generic
 `secret`/`py_hardcoded_secret` type means the specific rule didn't match (often
 just wrong test length), NOT that the value is unprotected.
+
+### Keyword-anchored batch (2026-07-11, commits e028534 canonical / dfd4d49 OSS)
+Vendors with NO distinctive token prefix (would collide with generic hex/base64
+if matched by format alone) added via the keyword-anchored style — the rule
+fires only when the vendor name is within ~25 chars of the token and captures
+group 1 (token only): **Vercel** (`[A-Za-z0-9]{24}`), **Fastly**
+(`[A-Za-z0-9_-]{32}`), **Linode** (`[a-f0-9]{64}`), **Kraken**
+(`[A-Za-z0-9+/=]{56,88}`), **Etsy** (`[a-z0-9]{24}`). Overlap-verified (each
+types as its own type, extracts only the token), 0 FP on the 4 real repos, gate
+byte-identical. Auth0 dropped: the generic `oauth2_client_secret` rule already
+wins and is correct (an Auth0 client secret IS an oauth2 secret) — a competing
+vendor rule just loses. RULE OF THUMB: if the generic catch is already accurate,
+don't add a more-specific rule that can't win precedence — it's dead weight.
 
 **This is the method to repeat:** cross-test against each competitor's own rule
 catalog periodically — it surfaces exactly which real vendors you're missing.
