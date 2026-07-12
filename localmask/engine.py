@@ -826,6 +826,14 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
     # ── Layer 1: Regex ───────────────────────────────────────────────────
     raw_detections = RegexRulesSafe.scan_file(rel_path, content, sensitivity)
 
+    # IBAN is intentionally country-agnostic (any ISO country, incl. future
+    # ones), so the mod-97 checksum is the sole gate. Reject failing candidates
+    # HERE — before `already_found` below — so a secret-shaped string that only
+    # looks IBAN-ish (e.g. a Twilio SID `AC…`) isn't swallowed by the IBAN match
+    # and can still be caught by the entropy layer.
+    raw_detections = [d for d in raw_detections
+                      if d.get("type") != "iban" or _iban_ok(d.get("entity", ""))]
+
     # ── Layer 2: NER (freetext files: .md, .txt, .rst, .adoc) ────────────
     ner = _get_ner()
     bert = _get_bert()

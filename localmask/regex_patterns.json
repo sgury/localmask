@@ -666,10 +666,10 @@
       "reason": "Ethereum address"
     },
     "iban": {
-      "pattern": "(?<![A-Za-z0-9])(?:AD|AE|AL|AT|AZ|BA|BE|BG|BH|BR|BY|CH|CR|CY|CZ|DE|DK|DO|EE|EG|ES|FI|FO|FR|GB|GE|GI|GL|GR|GT|HR|HU|IE|IL|IQ|IS|IT|JO|KW|KZ|LB|LC|LI|LT|LU|LV|MC|MD|ME|MK|MT|MU|NL|NO|PK|PL|PS|PT|QA|RO|RS|SA|SC|SE|SI|SK|SM|ST|SV|TL|TN|TR|UA|VA|VG|XK)\\d{2}(?:\\s?[A-Za-z0-9]){11,30}(?![A-Za-z0-9])",
+      "pattern": "(?<![A-Za-z0-9])[A-Z]{2}\\d{2}(?:\\s?[A-Za-z0-9]){11,30}(?![A-Za-z0-9])",
       "confidence": 0.9,
       "level": "standard",
-      "reason": "IBAN bank account (ISO country code + mod-97 checksum)"
+      "reason": "IBAN bank account (mod-97 checksum-validated, any country)"
     },
     "ipv6_address": {
       "pattern": "(?<![:0-9A-Fa-f])(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}(?![:0-9A-Fa-f])|(?<!\\[)\\b(?:[0-9A-Fa-f]{1,4}:){2,7}:(?:[0-9A-Fa-f]{1,4})?\\b|\\b[0-9A-Fa-f]{0,3}[A-Fa-f][0-9A-Fa-f]{0,3}::[0-9A-Fa-f]{1,4}\\b",

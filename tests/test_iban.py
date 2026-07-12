@@ -21,11 +21,17 @@ def _has_iban(code):
                       for d in _scan_file(s, code, "x.py").get("findings", [])]
 
 
+# Country-agnostic: the mod-97 checksum is the sole gate, so IBANs from ANY
+# ISO country (including non-European and future ones) must be caught.
 VALID = [
     "IBAN: DE89 3704 0044 0532 0130 00",
     'iban = "DE89370400440532013000"',
     'account = "GB82 WEST 1234 5698 7654 32"',
     "FR1420041010050500013M02606",
+    "NO9386011117947",                          # Norway (15 chars)
+    "KW81CBKU0000000000001234560101",           # Kuwait
+    "BR9700360305000010009795493P1",            # Brazil
+    "SC18SSCB11010000000000001497USD",          # Seychelles
 ]
 
 # A Twilio Account SID (AC + 32 hex) — assembled from fragments so no
