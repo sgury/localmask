@@ -25,13 +25,14 @@ ports, versions, IDs — are never masked.
 
 | Mode | Edition | `$42,000` becomes | The AI can | Revealed to the provider |
 |---|---|---|---|---|
-| `relative` | **Free / OSS** | `(0.42*R_SALARY)` | compare, sum, compute ratios | relative sizes **within** a category |
+| `token` | **Free / OSS** | `~[AMOUNT_0]~` | nothing numeric | nothing |
 | `bucket` | Pro | `~[AMOUNT_5D_USD_0]~` | reason about magnitude | order of magnitude + currency |
-| `token` | Pro | `~[AMOUNT_0]~` | nothing numeric | nothing |
+| `relative` | Pro | `(0.42*R_SALARY)` | compare, sum, compute ratios | relative sizes **within** a category |
 
-The signature `relative` mode is free and open-source. The opacity *choice*
-(`token`/`bucket`) is a Pro capability; asking for one on the free edition
-fails loudly with an upgrade message — LocalMask never substitutes a
+The simplest, safest mode — `token` (full opacity) — is free and open-source.
+The smarter modes that reveal something useful to the AI (`bucket` magnitude,
+`relative` computable ratios) are a Pro capability; asking for one on the free
+edition fails loudly with an upgrade message — LocalMask never substitutes a
 different protection level than the one you chose.
 
 ## How `relative` works — honestly
