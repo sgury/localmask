@@ -27,9 +27,28 @@ from licensing import LicenseManager, generate_license_key
 mcp = FastMCP(
     "LocalMask Pro",
     instructions=(
-        "Privacy-first secret detection & masking for code repositories. "
-        "Scans repos for credentials, PII, and sensitive data. "
-        "All processing happens 100% locally — secrets never leave your machine."
+        "LocalMask is a LOCAL privacy layer between you and the user's code. "
+        "Everything it does runs 100% on the user's machine over stdio — no "
+        "network, nothing leaves the computer.\n\n"
+        "WHAT YOU SEE IS MASKED. When you read the user's code through this "
+        "server, every secret and piece of PII (API keys, passwords, tokens, "
+        "connection strings, emails, etc.) is replaced by an opaque placeholder "
+        "of the form ~[TYPE_N]~ (e.g. ~[PASSWORD_0]~, ~[AWS_KEY_1]~). The real "
+        "values stay local and are NEVER sent to you.\n\n"
+        "HOW TO WORK:\n"
+        "1. To look at a file that might contain secrets, call read_file_masked("
+        "path) INSTEAD of reading the raw file — you get the masked content.\n"
+        "2. Treat each ~[TOKEN]~ as an opaque stand-in. Do NOT guess, invent, or "
+        "ask for the real value, and keep the token verbatim in any code you "
+        "write back — it is valid and the user's tooling substitutes the real "
+        "value locally.\n"
+        "3. If you produce code/answers containing ~[TOKEN]~ that the user needs "
+        "to run with real values, call unmask_text(text) — restoration happens "
+        "locally.\n"
+        "4. scan_repo/get_detections give a whole-repo security overview; the "
+        "per-file read_file_masked is the simplest primitive for everyday chat.\n\n"
+        "You can reassure the user plainly: their secrets never leave their "
+        "machine — you are only ever shown masked placeholders."
     ),
 )
 
@@ -505,6 +524,77 @@ def rehydrate_answer(scan_id: str, text: str) -> str:
         return json.dumps({"error": f"Scan not found: {scan_id}"}, indent=2)
     session = _new_session(scan["repo_url"], temp=False)   # hydrate vault only
     return json.dumps({"text": _rehydrate(session, text)}, indent=2)
+
+
+# ── Simple local IDE workflow (no scan_id, no whole-repo scan) ───────────────
+# One in-process vault shared by every read_file_masked / unmask_text call, so a
+# given real value always maps to the SAME ~[TOKEN]~ across files and text for
+# this session (and — via the persistent local store — across restarts). This is
+# the easiest path for IDE chat: read code masked, hand back tokens, restore
+# locally. Nothing here ever contacts a network.
+import threading as _threading
+
+_IDE_SESSION = None
+_IDE_LOCK = _threading.Lock()
+
+
+def _ide_session() -> dict:
+    global _IDE_SESSION
+    with _IDE_LOCK:
+        if _IDE_SESSION is None:
+            from localmask.state import _new_session
+            _IDE_SESSION = _new_session("localmask-ide-session", temp=False)
+            _IDE_SESSION["sensitivity"] = "standard"
+        return _IDE_SESSION
+
+
+@mcp.tool()
+def read_file_masked(path: str) -> str:
+    """Read a LOCAL file through the mask — use this INSTEAD of reading the raw
+    file whenever it might hold secrets or PII. The returned content is masked:
+    every credential/PII value is replaced by an opaque ~[TOKEN]~ placeholder,
+    and the real values never leave the user's machine.
+
+    Args:
+        path: Local file path (absolute, or relative to the user's project).
+
+    Returns the masked content plus a summary of what was masked (types + counts
+    only, never real values). Keep every ~[TOKEN]~ verbatim in code you write
+    back; call unmask_text() to restore real values locally.
+    """
+    import pathlib
+    fp = pathlib.Path(os.path.expanduser(path))
+    if not fp.is_file():
+        return json.dumps({"error": f"File not found: {path}"}, indent=2)
+    try:
+        content = fp.read_text(errors="ignore")
+    except Exception as e:
+        return json.dumps({"error": f"Cannot read {path}: {e}"}, indent=2)
+    from localmask.engine import _scan_file
+    from collections import Counter
+    res = _scan_file(_ide_session(), content, str(fp))
+    types = Counter(d.get("subtype") for d in res.get("findings", []))
+    return json.dumps({
+        "path": str(fp),
+        "masked_content": res.get("masked", content),
+        "masked_count": len(res.get("findings", [])),
+        "masked_types": [{"type": t, "count": c} for t, c in types.most_common()],
+        "note": ("Each ~[TOKEN]~ stands in for a real secret/PII value kept "
+                 "local. Keep tokens verbatim; call unmask_text() to restore."),
+    }, indent=2)
+
+
+@mcp.tool()
+def unmask_text(text: str) -> str:
+    """Restore ~[TOKEN]~ placeholders back to their real local values — use it on
+    code or answers you built from masked content, before the user runs them.
+    100% local: the token→value mapping never left the machine.
+
+    Args:
+        text: Text containing ~[TOKEN]~ placeholders (from read_file_masked).
+    """
+    from localmask.masking import _rehydrate
+    return json.dumps({"text": _rehydrate(_ide_session(), text)}, indent=2)
 
 
 @_cap_tool("web_ui")
