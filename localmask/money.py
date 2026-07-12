@@ -100,10 +100,11 @@ def money_mode() -> str:
             m = "off"
     if m not in MODES:
         return "off"
-    if m in ("token", "bucket"):
-        # Edition gate: relative is free/OSS; the token/bucket opacity choice
-        # is Pro. A free user asking for bucket gets a LOUD refusal — never a
-        # silent substitute (protection level is an explicit uniform choice).
+    if m in ("relative", "bucket"):
+        # Edition gate: token (full opacity, simplest/safest) is free; the
+        # smarter modes — bucket (order-of-magnitude) and relative (computable
+        # ratios) — are Pro. A free user asking for one gets a LOUD refusal,
+        # never a silent substitute (protection level is an explicit choice).
         from ._edition import require
         require("finance_modes")
     return m
