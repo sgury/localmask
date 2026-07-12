@@ -223,6 +223,10 @@ class RegexRulesSafe:
         "generic_api_key", "password_assignment", "password_unquoted",
         "unquoted_env_secret", "any_env_password", "any_env_secret",
         "any_env_token", "tf_hcl_secret", "java_properties_password",
+        # Language hardcoded-secret matchers (secret|password|token|api_key =
+        # "…") are equally prone to placeholders (YOUR_API_KEY_HERE, xxxx…,
+        # your-secret-key) — gate their values too.
+        "py_hardcoded_secret", "js_hardcoded_secret",
     }
 
     # Placeholder shapes: template vars, env references, "your-key-here"
@@ -237,6 +241,8 @@ class RegexRulesSafe:
         re.compile(r"(?i)[-_](?:here|goes[-_]here)$"),  # key_goes_here
         re.compile(r"(?i)(?:changeme|change[-_]me|placeholder|xxxx"
                    r"|example|dummy|sample)"),
+        # "replace-with-…", "replace_this", "insert-…-here", "fill[-_]in"
+        re.compile(r"(?i)(?:replace|insert|enter|fill)[-_](?:me|this|with|in|your)"),
         re.compile(r"(?i)(?:os\.environ|process\.env|getenv|env\[)"),
     ]
 

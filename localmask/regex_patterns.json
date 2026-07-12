@@ -14,7 +14,7 @@
       "reason": "AWS secret access key"
     },
     "private_key_header": {
-      "pattern": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----",
+      "pattern": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Private key"
