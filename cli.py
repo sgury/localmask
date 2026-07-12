@@ -132,6 +132,117 @@ def _scan_git_history(eng, src_dir, stats):
     stats["total_detections"] = (stats or {}).get("total_detections", 0) + len(hits)
 
 
+def _mcp_install(project: bool = False, dry_run: bool = False):
+    """Register the LocalMask MCP server with detected IDEs in one command —
+    no manual JSON editing. 100% local: no org server needed.
+
+    Writes/merges an `mcpServers.localmask` entry into Claude Desktop, Cursor,
+    and (with --project) a project-level .mcp.json, and runs `claude mcp add`
+    for Claude Code. --dry-run prints what it WOULD write without touching any
+    file."""
+    import json as _json
+    import shutil
+    import subprocess
+    G, C, D, B, Y, X = GREEN, CYAN, DIM, BOLD, YELLOW, RESET
+    home = os.path.expanduser("~")
+
+    # Register the mcp_server.py that ships WITH this CLI (guaranteed current and
+    # dependency-consistent with the interpreter running this command), rather
+    # than a possibly-stale ~/.localmask copy from an older install.
+    here = os.path.dirname(os.path.abspath(__file__))
+    script = os.path.join(here, "mcp_server.py")
+    py = sys.executable
+    if not os.path.exists(script):  # unusual layout — fall back to installed copy
+        alt = os.path.join(home, ".localmask", "mcp_server.py")
+        alt_py = os.path.join(home, ".localmask", "venv", "bin", "python3")
+        if os.path.exists(alt):
+            script = alt
+            py = alt_py if os.path.exists(alt_py) else py
+    entry = {"command": py, "args": [script]}
+
+    tag = f" {Y}(dry-run){X}" if dry_run else ""
+    print(f"\n  {B}{C}LocalMask MCP — IDE setup{X}{tag}  {D}(100% local, no server){X}\n")
+    print(f"  {D}server:{X} {script}")
+    print(f"  {D}python:{X} {py}\n")
+
+    def _merge(path, label):
+        if dry_run:
+            print(f"  {D}would write{X} {label} {D}{path}{X}")
+            return True
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            cfg = {}
+            if os.path.exists(path):
+                try:
+                    cfg = _json.loads(open(path).read() or "{}")
+                except Exception:
+                    cfg = {}
+            cfg.setdefault("mcpServers", {})["localmask"] = entry
+            with open(path, "w") as f:
+                _json.dump(cfg, f, indent=2)
+            print(f"  {G}✓{X} {label} {D}{path}{X}")
+            return True
+        except Exception as e:
+            print(f"  {Y}⚠{X} {label}: {e}")
+            return False
+
+    done = 0
+
+    # Claude Code CLI — has its own registry command.
+    if shutil.which("claude"):
+        if dry_run:
+            print(f"  {D}would run{X} claude mcp add localmask -- {py} {script}")
+            done += 1
+        else:
+            # Remove any prior (possibly stale) registration first so re-running
+            # this reliably points Claude Code at the current server.
+            subprocess.run(["claude", "mcp", "remove", "localmask"],
+                           capture_output=True, text=True)
+            r = subprocess.run(["claude", "mcp", "add", "localmask", "--", py, script],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                print(f"  {G}✓{X} Claude Code (CLI)")
+                done += 1
+            else:
+                print(f"  {D}· Claude Code: run → claude mcp add localmask -- {py} {script}{X}")
+
+    # Claude Desktop (per-OS config location).
+    if sys.platform == "darwin":
+        cd = os.path.join(home, "Library", "Application Support", "Claude",
+                          "claude_desktop_config.json")
+    elif sys.platform.startswith("win"):
+        cd = os.path.join(os.environ.get("APPDATA", home), "Claude",
+                          "claude_desktop_config.json")
+    else:
+        cd = os.path.join(home, ".config", "Claude", "claude_desktop_config.json")
+    if os.path.exists(cd) or os.path.isdir(os.path.dirname(cd)):
+        done += _merge(cd, "Claude Desktop")
+    else:
+        print(f"  {D}· Claude Desktop not found — skipping{X}")
+
+    # Cursor.
+    if os.path.isdir(os.path.join(home, ".cursor")) or shutil.which("cursor"):
+        done += _merge(os.path.join(home, ".cursor", "mcp.json"), "Cursor")
+    else:
+        print(f"  {D}· Cursor not found — skipping{X}")
+
+    # Project-level .mcp.json (VS Code / Copilot) — opt-in so we never clobber a
+    # repo's config unexpectedly.
+    if project:
+        done += _merge(os.path.join(os.getcwd(), ".mcp.json"),
+                       "VS Code / project (.mcp.json here)")
+
+    if done:
+        print(f"\n  {G}Registered with {done} target(s).{X} {B}Restart your IDE{X} "
+              f"to load it.")
+        print(f"  {D}Then just chat — the AI reads your code masked via "
+              f"read_file_masked and restores tokens with unmask_text.{X}\n")
+    else:
+        print(f"\n  {Y}No IDEs detected.{X} Add this to your IDE's MCP config manually:")
+        print(f'  {D}{{"mcpServers":{{"localmask":{{"command":"{py}",'
+              f'"args":["{script}"]}}}}}}{X}\n')
+
+
 def _proxy_setup(tool: str, port: int):
     """Point a dev tool at the local masking proxy in one command.
 
@@ -1585,6 +1696,14 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     exp_p.add_argument("scan_id", help="Scan ID to export")
     exp_p.add_argument("output_dir", help="Folder to write masked files into")
 
+    mcp_p = sub.add_parser("mcp-install",
+                           help="Register the local MCP server with your IDEs (Cursor, "
+                                "Claude Desktop, Claude Code)")
+    mcp_p.add_argument("--project", action="store_true",
+                       help="Also write a .mcp.json in the current directory (VS Code / Copilot)")
+    mcp_p.add_argument("--dry-run", action="store_true",
+                       help="Show what would be written without changing any file")
+
     proxy_p = sub.add_parser("proxy",
                              help="Run the local AI proxy, or set up a tool to use it (Pro)")
     proxy_p.add_argument("action", nargs="?", default="run",
@@ -1632,6 +1751,11 @@ Full details: FINANCE.md""")
         if not getattr(args, "no_open", False):
             import webbrowser
             webbrowser.open(f"mailto:{addr}?subject=LocalMask%20feedback")
+        return
+
+    if args.command == "mcp-install":
+        _mcp_install(project=getattr(args, "project", False),
+                     dry_run=getattr(args, "dry_run", False))
         return
 
     if args.command == "proxy":

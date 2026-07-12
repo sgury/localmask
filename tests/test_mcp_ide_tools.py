@@ -60,3 +60,34 @@ def test_new_tools_are_advertised():
     names = [t.name for t in asyncio.run(m.mcp.list_tools())]
     assert "read_file_masked" in names
     assert "unmask_text" in names
+
+
+def test_mcp_install_dry_run_points_at_current_server(capsys):
+    # dry-run must not touch any file and must register the mcp_server.py that
+    # ships with this CLI (never a possibly-stale ~/.localmask copy).
+    import cli
+    cli._mcp_install(project=True, dry_run=True)
+    out = capsys.readouterr().out
+    assert "mcp_server.py" in out
+    assert "would write" in out or "would run" in out
+    # points at the sibling of cli.py, i.e. the current source
+    assert os.path.join(os.path.dirname(os.path.abspath(cli.__file__)),
+                        "mcp_server.py") in out
+
+
+def test_mcp_install_merges_without_clobbering(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".cursor").mkdir(parents=True)
+    # a pre-existing server must survive the merge
+    (home / ".cursor" / "mcp.json").write_text(
+        '{"mcpServers":{"other":{"command":"x","args":[]}}}')
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr("os.path.expanduser",
+                        lambda p: p.replace("~", str(home), 1) if p.startswith("~") else p)
+    # avoid the claude CLI subprocess in the test environment
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    import cli
+    cli._mcp_install(project=False, dry_run=False)
+    cur = json.loads((home / ".cursor" / "mcp.json").read_text())
+    assert "other" in cur["mcpServers"]        # not clobbered
+    assert "localmask" in cur["mcpServers"]     # added

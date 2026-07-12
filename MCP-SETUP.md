@@ -20,8 +20,10 @@ This installs LocalMask into `~/.localmask/` and registers the MCP server with
 every supported IDE it finds. Restart your IDE afterwards. Done — no account, no
 server, no config to edit.
 
-> Prefer pip? `pipx install localmask`, then add the MCP config shown under
-> **Manual config** below (point `command` at your `localmask` env's `python`).
+> Prefer pip? `pipx install localmask`, then run **`localmask mcp-install`** —
+> it registers the server with every IDE it detects (Cursor, Claude Desktop,
+> Claude Code), no JSON editing. Add `--dry-run` to preview, `--project` to also
+> drop a `.mcp.json` in the current folder for VS Code / Copilot.
 
 ---
 
