@@ -314,6 +314,17 @@ def _cnp_ok(value: str) -> bool:
     return int(digits[12]) == (1 if c == 10 else c)
 
 
+def _iban_ok(value: str) -> bool:
+    """IBAN mod-97 checksum (ISO 13616): strip spaces, move the first 4 chars to
+    the end, map letters A=10…Z=35, the resulting integer mod 97 must equal 1.
+    Rejects random `CC00…`-shaped strings so IBAN can fire at standard scans."""
+    s = re.sub(r"\s", "", value).upper()
+    if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", s):
+        return False
+    rearranged = s[4:] + s[:4]
+    return int("".join(str(int(c, 36)) for c in rearranged)) % 97 == 1
+
+
 # Special characters that appear in generated passwords/keys but not in code
 # identifiers, versions, datetimes, or dtype strings. Separators (- _ . / :)
 # and '=' are deliberately excluded — '=' is an assignment operator and
@@ -1078,6 +1089,8 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
             continue
         if dtype == "romanian_cnp" and not _cnp_ok(v):
             continue
+        if dtype == "iban" and not _iban_ok(v):
+            continue
         if dtype in ("password_assignment", "declare_password", "any_env_password"):
             if _is_word_like(v):
                 continue
@@ -1119,7 +1132,8 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # protect them (leaving the token absent → finding silently dropped).
         # They're verified secrets — mask directly, like DIRECT_MASK patterns.
         if det.get("type", "") in RegexRulesSafe.DIRECT_MASK \
-                or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key"):
+                or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key",
+                                           "private_key_header"):
             # Direct mask skips the key-position guard but still must respect
             # token boundaries — replacing the value inside a longer blob
             # (hex/base64 that happens to contain it) corrupts the blob.

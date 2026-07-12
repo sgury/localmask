@@ -48,6 +48,12 @@ PRIVATE_KEYS = [
     "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl\n-----END OPENSSH PRIVATE KEY-----",
     "-----BEGIN EC PRIVATE KEY-----\nMHcC\n-----END EC PRIVATE KEY-----",
     "-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQdG\n-----END PGP PRIVATE KEY BLOCK-----",
+    # multiline PEM assigned to a var (key-position guard used to drop it)
+    'key = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END PRIVATE KEY-----"',
+    # whole key on ONE line, no separators
+    'k = "-----BEGIN PRIVATE KEY-----MIIEvQIBADANBg-----END PRIVATE KEY-----"',
+    # JSON/env single-string form with escaped \n
+    '{"private_key":"-----BEGIN PRIVATE KEY-----\\nMIIEvQIB\\n-----END PRIVATE KEY-----\\n"}',
 ]
 
 

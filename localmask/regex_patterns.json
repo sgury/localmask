@@ -14,7 +14,7 @@
       "reason": "AWS secret access key"
     },
     "private_key_header": {
-      "pattern": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----",
+      "pattern": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[A-Za-z0-9+/=]*",
       "confidence": 0.99,
       "level": "minimal",
       "reason": "Private key"
@@ -666,10 +666,10 @@
       "reason": "Ethereum address"
     },
     "iban": {
-      "pattern": "\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b",
-      "confidence": 0.85,
-      "level": "strict",
-      "reason": "IBAN bank account"
+      "pattern": "(?<![A-Za-z0-9])(?:AD|AE|AL|AT|AZ|BA|BE|BG|BH|BR|BY|CH|CR|CY|CZ|DE|DK|DO|EE|EG|ES|FI|FO|FR|GB|GE|GI|GL|GR|GT|HR|HU|IE|IL|IQ|IS|IT|JO|KW|KZ|LB|LC|LI|LT|LU|LV|MC|MD|ME|MK|MT|MU|NL|NO|PK|PL|PS|PT|QA|RO|RS|SA|SC|SE|SI|SK|SM|ST|SV|TL|TN|TR|UA|VA|VG|XK)\\d{2}(?:\\s?[A-Za-z0-9]){11,30}(?![A-Za-z0-9])",
+      "confidence": 0.9,
+      "level": "standard",
+      "reason": "IBAN bank account (ISO country code + mod-97 checksum)"
     },
     "ipv6_address": {
       "pattern": "(?<![:0-9A-Fa-f])(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}(?![:0-9A-Fa-f])|(?<!\\[)\\b(?:[0-9A-Fa-f]{1,4}:){2,7}:(?:[0-9A-Fa-f]{1,4})?\\b|\\b[0-9A-Fa-f]{0,3}[A-Fa-f][0-9A-Fa-f]{0,3}::[0-9A-Fa-f]{1,4}\\b",
