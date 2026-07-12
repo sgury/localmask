@@ -365,11 +365,18 @@ def _looks_generated(value: str) -> bool:
     # carries `=` as trailing base64 padding, so allow it only at the end.
     if "=" in value.rstrip("="):
         return False
-    # Pure hex tokens (≥32: MD5/SHA/Twilio-style) and UUIDs are generated
-    # credential shapes even though hex is only two classes. The ≥32 floor
-    # keeps short hex constants like "0123456789abcdef" out.
-    if _HEX_TOKEN.fullmatch(value) or _UUID.fullmatch(value):
-        return True
+    # UUIDs and git/SHA-1 object IDs (40 hex) are identifiers and digests, not
+    # credentials. In this context-LESS fallback they are overwhelmingly trace
+    # IDs, commit SHAs and hashes — flagging them is pure noise. A real secret
+    # that happens to be UUID- or 40-hex-shaped is still caught when a nearby
+    # key/secret/token/password keyword labels it (the context path, which
+    # never reaches this function).
+    if _UUID.fullmatch(value):
+        return False
+    # Other pure hex tokens (≥32: MD5 / 32-hex API keys / Twilio-style) stay
+    # trusted; 40-hex is a SHA-1 / git object id, so it's excluded as a digest.
+    if _HEX_TOKEN.fullmatch(value):
+        return len(value) != 40
     classes = sum([any(c.isupper() for c in value),
                    any(c.islower() for c in value),
                    any(c.isdigit() for c in value)])

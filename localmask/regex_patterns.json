@@ -1423,6 +1423,12 @@
         "confidence": 0.95,
         "level": "minimal",
         "reason": "Consul/Nomad ACL token in HCL"
+      },
+      "tf_consul_agent_token": {
+        "pattern": "(?i)(?<![A-Za-z0-9_])(?:agent|replication)\\s*=\\s*[\"\\']([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})[\"\\']",
+        "confidence": 0.9,
+        "level": "minimal",
+        "reason": "Consul/Nomad ACL agent/replication token (UUID) in HCL"
       }
     },
     "toml": {
