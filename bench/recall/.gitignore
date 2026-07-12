@@ -1,0 +1,11 @@
+# Generated artifacts contain secret-shaped literals — never commit them.
+cands.json
+candidates.txt
+gl_cands.json
+gl_validated.json
+manifest.json
+scored.json
+gl_corpus.json
+gl_out.json
+corpus/
+gitleaks-src/
