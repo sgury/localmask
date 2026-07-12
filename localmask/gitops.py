@@ -43,6 +43,10 @@ def _validate_git_url(url: str) -> str:
         raise ValueError(f"Invalid git URL: {url!r}")
     for rx in _ALLOWED_URL_RES:
         if rx.match(url):
+            # Closed Environment: the remote host (clone source OR publish
+            # destination) must be on the egress allowlist.
+            from .netpolicy import assert_host_allowed
+            assert_host_allowed(url, "git")
             return url
     # Local path remote (used by tests and on-disk bare repos)
     if not url.startswith("-") and os.path.exists(url):

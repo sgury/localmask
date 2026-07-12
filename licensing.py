@@ -595,6 +595,9 @@ class LicenseManager:
 
         # Validate with org server (also allocates/enforces a seat).
         try:
+            # Closed Environment: the org server host must be allowlisted.
+            from localmask.netpolicy import assert_host_allowed
+            assert_host_allowed(server_url, "org-server")
             body = json.dumps({"license_key": license_key}).encode()
             req = Request(
                 f"{server_url.rstrip('/')}/api/validate",

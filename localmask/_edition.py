@@ -49,6 +49,7 @@ _CAP_MIN_EDITION = {
     "ldap_auth":      "team",   # LDAP/AD auth + group→tier mapping
     "audit_log":      "team",   # tamper-evident audit trail + export (SIEM)
     "sso_saml":       "team",   # SSO sign-in on the org server (OIDC + SAML)
+    "closed_env":     "team",   # deny-by-default egress allowlist (org-locked)
 }
 
 _ORDER = {"free": 0, "pro": 1, "team": 2, "ent": 3}

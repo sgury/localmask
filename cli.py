@@ -75,6 +75,10 @@ def _fetch_latest():
     Only called from `check-updates` / `license` — LocalMask never contacts
     the network on its own."""
     try:
+        # Closed Environment blocks the update check unless the (mirror) host is
+        # allowlisted — LocalMask never phones home in a closed org.
+        from localmask.netpolicy import assert_host_allowed
+        assert_host_allowed(_LATEST_URL, "update-check")
         req = urllib.request.Request(
             _LATEST_URL, headers={"User-Agent": "localmask-cli"})
         with urllib.request.urlopen(req, timeout=5) as r:
