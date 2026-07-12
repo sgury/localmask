@@ -127,12 +127,30 @@ flag a collision.
 Caveat: an auto-generated corpus is noisy (exrex fills keyword-context with
 junk); validate patterns against clean canonical tokens, not the noisy corpus.
 
-## For a real RECALL number (future work)
+## Recall number — MEASURED (2026-07-12, `bench/recall/`)
 
-This run measured behavior on clean-ish real code (a precision proxy). A true
-real-world **recall** number needs a corpus with known planted/leaked secrets
-(SecretBench academic dataset, or a curated set of real-format keys in real
-repos). SecretBench is gated/large — obtain access before making recall claims.
+We now have a real, reproducible recall number. `bench/recall/` builds ground
+truth on **gitleaks' home turf** (adversarial to us): extract gitleaks' own
+sample secrets → keep only what gitleaks itself validates (133 secrets, 30
+rule-types) → plant in a realistic corpus with hard negatives → score by
+value-match.
+
+| tool | recall | FP (hard-neg) |
+|------|-------:|--------------:|
+| **LocalMask (free)** | **94.7%** (126/133) | 8 |
+| gitleaks | 86.5% (115/133) | 1 |
+| trufflehog (static) | 33.1% (44/133) | 0 |
+
+**Defensible headline:** on gitleaks' own validated secret set, LocalMask
+recalls 94.7% vs gitleaks' 86.5% — because format-first matching survives the
+context changes (yaml/json/env/connstr) that break gitleaks' keyword-gated
+rules. LocalMask trails on precision (8 vs 1 hard-neg): a git SHA, UUID, md5,
+and bare 32-hex flag as generic `secret`. UUID + git-SHA are safe to suppress
+(distinctive shapes); bare 32-hex is an inherent recall/precision tradeoff.
+
+Still measures recall RELATIVE to gitleaks' catalog. For an absolute in-the-wild
+number, run the same `bench/recall/run_bench.py` scorer against SecretBench
+(academic, gated — email sbasak4@ncsu.edu + sign the data agreement).
 
 ## Reproduce
 
