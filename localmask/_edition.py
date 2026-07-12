@@ -43,9 +43,12 @@ _CAP_MIN_EDITION = {
     "finance_modes":  "pro",    # Finance Mode: token/bucket opacity choice
     "org_rules":      "team",   # shared team rules server
     "shared_vault":   "team",   # team-wide Redis token vault (consistent tokens)
-    "ldap_auth":      "ent",    # LDAP/AD auth + group→tier mapping
-    "audit_log":      "ent",    # tamper-evident audit trail + export (SIEM)
-    "sso_saml":       "ent",    # SSO sign-in on the org server (OIDC + SAML)
+    # Team and Enterprise share the SAME feature set — the ONLY difference is
+    # seat count (Enterprise = unlimited; see seat enforcement in
+    # org-server/org_api.py /api/validate). So LDAP/audit/SSO are team-tier too.
+    "ldap_auth":      "team",   # LDAP/AD auth + group→tier mapping
+    "audit_log":      "team",   # tamper-evident audit trail + export (SIEM)
+    "sso_saml":       "team",   # SSO sign-in on the org server (OIDC + SAML)
 }
 
 _ORDER = {"free": 0, "pro": 1, "team": 2, "ent": 3}

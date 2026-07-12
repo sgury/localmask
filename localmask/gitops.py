@@ -7,6 +7,20 @@ import subprocess
 import tempfile
 
 
+def _org_forbids_public() -> str:
+    """Team/Enterprise never publish masked mirrors to PUBLIC repos — a public
+    mirror is a leak surface in a closed/enterprise setting. Returns a refusal
+    message for team/ent, or "" when public publishing is allowed (free/pro)."""
+    try:
+        from ._edition import edition
+        if edition() in ("team", "ent"):
+            return ("Public repos are disabled for Team/Enterprise — masked "
+                    "mirrors are always private. Publish to a private remote.")
+    except Exception:
+        pass
+    return ""
+
+
 # ── URL validation ──────────────────────────────────────────────────────────
 # Git URLs are attacker-influenced input (API / MCP callers). Two attack
 # classes are blocked here:
@@ -207,6 +221,9 @@ def remote_repo_exists(url: str, token: str = "") -> bool | None:
 def create_remote_repo(url: str, token: str = "", private: bool = True):
     """Create the remote masked repo. Returns (ok, message). Supports GitHub via
     the API (with a token) or the `gh` CLI (its own auth)."""
+    # Team/Enterprise masked mirrors are always private (no public leak surface).
+    if not private and _org_forbids_public():
+        private = True
     tgt = parse_git_target(url)
     if not tgt:
         return False, "unrecognized git URL — create the repo manually."
@@ -335,7 +352,11 @@ def add_readonly_collaborator(url: str, username: str) -> dict:
 
 def set_repo_public(url: str) -> dict:
     """Make the masked mirror public. Safe because it contains only ~[TOKEN]~
-    placeholders — then ANY AI reads it with no credential at all."""
+    placeholders — then ANY AI reads it with no credential at all.
+    Disabled for Team/Enterprise (masked mirrors stay private)."""
+    forbidden = _org_forbids_public()
+    if forbidden:
+        return {"ok": False, "message": forbidden}
     tgt = parse_git_target(url)
     if not tgt:
         return {"ok": False, "message": f"unrecognized git URL: {url}"}
