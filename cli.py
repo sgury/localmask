@@ -191,20 +191,28 @@ def _mcp_install(project: bool = False, dry_run: bool = False):
     # Claude Code CLI — has its own registry command.
     if shutil.which("claude"):
         if dry_run:
-            print(f"  {D}would run{X} claude mcp add localmask -- {py} {script}")
+            print(f"  {D}would run{X} claude mcp add -s user localmask -- {py} {script}")
             done += 1
         else:
-            # Remove any prior (possibly stale) registration first so re-running
-            # this reliably points Claude Code at the current server.
-            subprocess.run(["claude", "mcp", "remove", "localmask"],
+            # Register at USER scope (available in every project). Remove any
+            # prior user-scoped entry first so re-running updates a stale server.
+            # A stale entry in local/project scope would shadow this — warn if so.
+            subprocess.run(["claude", "mcp", "remove", "-s", "user", "localmask"],
                            capture_output=True, text=True)
-            r = subprocess.run(["claude", "mcp", "add", "localmask", "--", py, script],
-                               capture_output=True, text=True)
+            r = subprocess.run(["claude", "mcp", "add", "-s", "user", "localmask",
+                                "--", py, script], capture_output=True, text=True)
             if r.returncode == 0:
-                print(f"  {G}✓{X} Claude Code (CLI)")
+                print(f"  {G}✓{X} Claude Code (CLI) {D}(user scope){X}")
                 done += 1
+                shown = subprocess.run(["claude", "mcp", "list"],
+                                       capture_output=True, text=True).stdout
+                if script not in shown and "localmask" in shown:
+                    print(f"  {Y}  note:{X} another localmask entry (project/local "
+                          f"scope) may shadow this — remove it with "
+                          f"`claude mcp remove -s local localmask`")
             else:
-                print(f"  {D}· Claude Code: run → claude mcp add localmask -- {py} {script}{X}")
+                print(f"  {D}· Claude Code: run → claude mcp add -s user localmask "
+                      f"-- {py} {script}{X}")
 
     # Claude Desktop (per-OS config location).
     if sys.platform == "darwin":
