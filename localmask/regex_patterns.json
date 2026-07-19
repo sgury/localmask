@@ -1,5 +1,5 @@
 {
-  "_comment": "LocalMask detection patterns — editable without touching code. Loaded at runtime by regex_rules_safe.py. Each entry: {pattern, confidence, level, reason}.",
+  "_comment": "LocalMask detection patterns \u2014 editable without touching code. Loaded at runtime by regex_rules_safe.py. Each entry: {pattern, confidence, level, reason}.",
   "universal": {
     "aws_access_key": {
       "pattern": "(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![A-Za-z0-9])",
@@ -26,96 +26,142 @@
       "reason": "GitHub token"
     },
     "digitalocean_pat": {
-      "pattern": "(?<![A-Za-z0-9])dop_v1_[a-f0-9]{64}(?![a-f0-9])",
-      "confidence": 0.99, "level": "minimal", "reason": "DigitalOcean personal access token"
+      "pattern": "\\bdop_v1_[a-f0-9]{64}\\b",
+      "confidence": 0.98,
+      "level": "standard",
+      "reason": "digitalocean pat"
     },
     "gitlab_incoming_mail_token": {
       "pattern": "(?<![A-Za-z0-9])glimt-[0-9a-zA-Z_-]{25}(?![0-9a-zA-Z_-])",
-      "confidence": 0.98, "level": "minimal", "reason": "GitLab incoming mail token"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "GitLab incoming mail token"
     },
     "gitlab_runner_token": {
       "pattern": "(?<![A-Za-z0-9])glrt-t\\d_[0-9a-zA-Z_-]{27,}",
-      "confidence": 0.98, "level": "minimal", "reason": "GitLab runner authentication token"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "GitLab runner authentication token"
     },
     "gitlab_scim_token": {
       "pattern": "(?<![A-Za-z0-9])glsoat-[0-9a-zA-Z_-]{20}(?![0-9a-zA-Z_-])",
-      "confidence": 0.98, "level": "minimal", "reason": "GitLab SCIM token"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "GitLab SCIM token"
     },
     "heroku_api_key_v2": {
       "pattern": "(?<![A-Za-z0-9])HRKU-AA[0-9a-zA-Z_-]{58}",
-      "confidence": 0.98, "level": "minimal", "reason": "Heroku API key (v2)"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "Heroku API key (v2)"
     },
     "clojars_api_token": {
       "pattern": "(?i)(?<![A-Za-z0-9])CLOJARS_[a-z0-9]{60}",
-      "confidence": 0.99, "level": "minimal", "reason": "Clojars API token"
+      "confidence": 0.99,
+      "level": "minimal",
+      "reason": "Clojars API token"
     },
     "linear_api_key": {
-      "pattern": "(?<![A-Za-z0-9])lin_api_[a-zA-Z0-9]{40}(?![a-zA-Z0-9])",
-      "confidence": 0.99, "level": "minimal", "reason": "Linear API key"
+      "pattern": "\\blin_api_[a-zA-Z0-9]{40}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "linear api key"
     },
     "airtable_pat": {
       "pattern": "(?<![A-Za-z0-9])pat[a-zA-Z0-9]{14}\\.[a-f0-9]{64}(?![a-f0-9])",
-      "confidence": 0.98, "level": "minimal", "reason": "Airtable personal access token"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "Airtable personal access token"
     },
     "hashicorp_tf_token": {
-      "pattern": "(?<![A-Za-z0-9])[a-z0-9]{14}\\.atlasv1\\.[a-zA-Z0-9_=-]{60,70}",
-      "confidence": 0.98, "level": "minimal", "reason": "HashiCorp Terraform Cloud token"
+      "pattern": "\\b[a-z0-9]{14}\\.atlasv1\\.[a-z0-9\\-_=]{60,70}\\b",
+      "confidence": 0.97,
+      "level": "standard",
+      "reason": "hashicorp tf token"
     },
     "square_access_token": {
       "pattern": "(?<![A-Za-z0-9])(?:EAAA|sq0atp-)[A-Za-z0-9_-]{22,60}",
-      "confidence": 0.98, "level": "minimal", "reason": "Square access token"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "Square access token"
     },
     "mailchimp_api_key": {
       "pattern": "(?<![a-f0-9])[0-9a-f]{32}-us[0-9]{1,2}(?![0-9])",
-      "confidence": 0.98, "level": "minimal", "reason": "Mailchimp API key"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "Mailchimp API key"
     },
     "harness_api_key": {
       "pattern": "(?<![A-Za-z0-9])(?:pat|sat)\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9]{24}\\.[A-Za-z0-9]{20}",
-      "confidence": 0.98, "level": "minimal", "reason": "Harness API key"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "Harness API key"
     },
     "dropbox_token": {
       "pattern": "(?i)dropbox[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-z0-9]{15})(?![a-z0-9])",
-      "confidence": 0.9, "level": "minimal", "reason": "Dropbox token (keyword-anchored)"
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Dropbox token (keyword-anchored)"
     },
     "discord_token": {
       "pattern": "(?i)discord[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-f0-9]{64})(?![a-f0-9])",
-      "confidence": 0.9, "level": "minimal", "reason": "Discord token (keyword-anchored)"
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Discord token (keyword-anchored)"
     },
     "droneci_token": {
       "pattern": "(?i)droneci[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-z0-9]{32})(?![a-z0-9])",
-      "confidence": 0.9, "level": "minimal", "reason": "DroneCI access token (keyword-anchored)"
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "DroneCI access token (keyword-anchored)"
     },
     "codecov_token": {
       "pattern": "(?i)codecov[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-z0-9]{32})(?![a-z0-9])",
-      "confidence": 0.9, "level": "minimal", "reason": "Codecov access token (keyword-anchored)"
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Codecov access token (keyword-anchored)"
     },
     "hubspot_api_key": {
       "pattern": "(?i)hubspot[\\w.\\-]{0,25}['\"\\s:=]{1,4}([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})",
-      "confidence": 0.92, "level": "minimal", "reason": "HubSpot API key (keyword-anchored)"
+      "confidence": 0.92,
+      "level": "minimal",
+      "reason": "HubSpot API key (keyword-anchored)"
     },
     "intercom_token": {
       "pattern": "(?i)intercom[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-z0-9=_\\-]{60})(?![a-z0-9=_\\-])",
-      "confidence": 0.9, "level": "minimal", "reason": "Intercom API key (keyword-anchored)"
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Intercom API key (keyword-anchored)"
     },
     "bitbucket_client_id": {
       "pattern": "(?i)bitbucket[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-z0-9]{32})(?![a-z0-9])",
-      "confidence": 0.9, "level": "minimal", "reason": "Bitbucket client id (keyword-anchored)"
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "Bitbucket client id (keyword-anchored)"
     },
     "cloudflare_global_key": {
       "pattern": "(?i)cloudflare[\\w.\\-]{0,25}['\"\\s:=]{1,4}([a-f0-9]{37})(?![a-f0-9])",
-      "confidence": 0.92, "level": "minimal", "reason": "Cloudflare global API key (keyword-anchored)"
+      "confidence": 0.92,
+      "level": "minimal",
+      "reason": "Cloudflare global API key (keyword-anchored)"
     },
     "notion_token": {
       "pattern": "(?<![A-Za-z0-9_])secret_[A-Za-z0-9]{43}(?![A-Za-z0-9])",
-      "confidence": 0.97, "level": "minimal", "reason": "Notion integration token"
+      "confidence": 0.97,
+      "level": "minimal",
+      "reason": "Notion integration token"
     },
     "mailgun_api_key": {
       "pattern": "(?<![A-Za-z0-9])key-[a-z0-9]{32}(?![a-z0-9])",
-      "confidence": 0.95, "level": "minimal", "reason": "Mailgun API key"
+      "confidence": 0.95,
+      "level": "minimal",
+      "reason": "Mailgun API key"
     },
     "figma_pat": {
       "pattern": "(?<![A-Za-z0-9])figd_[A-Za-z0-9_-]{40,}",
-      "confidence": 0.98, "level": "minimal", "reason": "Figma personal access token"
+      "confidence": 0.98,
+      "level": "minimal",
+      "reason": "Figma personal access token"
     },
     "anthropic_key": {
       "pattern": "(?<![A-Za-z0-9])sk-ant-[a-zA-Z0-9\\-_]{20,}",
@@ -214,10 +260,10 @@
       "reason": "Telegram bot token"
     },
     "stripe_key": {
-      "pattern": "(?<![A-Za-z0-9])(?:sk|pk)_(?:live|test)_[0-9a-zA-Z]{24,}",
+      "pattern": "(?<![A-Za-z0-9])sk_(?:live|test)_[0-9a-zA-Z]{24,}",
       "confidence": 0.99,
       "level": "minimal",
-      "reason": "Stripe API key"
+      "reason": "Stripe secret key (sk_live_/sk_test_ only; pk_ publishable keys are public)"
     },
     "jwt_token": {
       "pattern": "(?<![A-Za-z0-9])eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}",
@@ -312,7 +358,7 @@
       "reason": "MongoDB connection string with credentials"
     },
     "jdbc_connection_string": {
-      "pattern": "(?<![A-Za-z0-9])jdbc:[a-z]+://[^\\s'\\\"]{10,}",
+      "pattern": "(?<![A-Za-z0-9])jdbc:[a-z]+://(?=[^\\s'\\\"]*(?:@|[Pp]assword=))[^\\s'\\\"]{10,}",
       "confidence": 0.9,
       "level": "minimal",
       "reason": "JDBC connection string"
@@ -330,7 +376,7 @@
       "reason": "Azure SQL connection string with password"
     },
     "url_embedded_password": {
-      "pattern": "://[^:/@\\s]+:([^@\\s'\\\"]{6,})@",
+      "pattern": "://[^:/@\\s]+:(?!(?:dev|test|dummy|fake|example|placeholder)_?pass(?:word)?(?:[^@\\s'\\\"]{0,20})?@)([^@\\s'\\\"]{6,})@",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Password embedded in connection URL"
@@ -378,10 +424,10 @@
       "reason": "Secret in curl -H header"
     },
     "datadog_prefixed_key": {
-      "pattern": "\\bdd[_-](?:api|app)[_-][a-f0-9]{20,}\\b",
+      "pattern": "\\bdd[_-][a-z][a-z0-9]*[_-][a-f0-9]{20,}\\b",
       "confidence": 0.95,
       "level": "minimal",
-      "reason": "Datadog API/app key with dd_ prefix"
+      "reason": "Datadog API/app key with dd_ prefix (including org-prefixed keys like dd_acme_...)"
     },
     "newrelic_key_pattern": {
       "pattern": "\\b[a-z0-9]{32,40}NRAL\\b",
@@ -396,13 +442,13 @@
       "reason": "Commented-out secret in code"
     },
     "password_assignment": {
-      "pattern": "(?i)\\w*(?:password|passwd|pwd)\\w*\\s*[:=]\\s*['\\\"]([^'\\\"]{6,})['\\\"]",
+      "pattern": "(?i)\\w*(?:password|passwd|pwd)(?!\\w*(?:template|subject|message|msg|body|format|label|name|title))\\w*\\s*[:=]\\s*['\\\"](?!d-[0-9a-fA-F]{10,})([^'\\\"]{6,})['\\\"]",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Password assignment"
     },
     "password_unquoted": {
-      "pattern": "(?i)\\w*(?:password|passwd|secret_key|master_key|encryption_key)\\w*\\s*[:=]\\s*(?!os\\.|sys\\.|self\\.|Path\\()([^\\s'\\\"#]{6,})$",
+      "pattern": "(?i)\\w*(?:password|passwd|secret_key|master_key|encryption_key)\\w*\\s*[:=]\\s*(?!os\\.|sys\\.|self\\.|Path\\(|None\\b|True\\b|False\\b)(?=[^\\s'\"#,);]*[0-9!@#$%^&*\\-+.~|])([^\\s'\\\"#,);]{6,})$",
       "confidence": 0.88,
       "level": "minimal",
       "reason": "Password/secret assignment (unquoted)"
@@ -414,7 +460,7 @@
       "reason": "Login function password argument"
     },
     "unquoted_env_secret": {
-      "pattern": "(?m)^(?:export\\s+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|APIKEY|API_KEY)[A-Z0-9_]*\\s*=\\s*([^\\s#'\\\"]{8,})",
+      "pattern": "(?m)^(?:export\\s+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|APIKEY|API_KEY)[A-Z0-9_]*\\s*=\\s*([^\\s#'\\\"\\[,$()]{10,})",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Secret env var (unquoted)"
@@ -426,7 +472,7 @@
       "reason": "Terraform secret field"
     },
     "db_connection_url": {
-      "pattern": "(?:postgres|postgresql|mysql|mongodb|redis|mssql)://[^\\s'\\\"<>]{8,}",
+      "pattern": "(?:postgres|postgresql|mysql|mongodb|redis|mssql)://(?=[^\\s'\\\"<>]*@)[^\\s'\\\"<>]{8,}",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "Database connection URL with credentials"
@@ -444,7 +490,7 @@
       "reason": "Credit card number"
     },
     "email": {
-      "pattern": "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}",
+      "pattern": "(?<![A-Za-z0-9._%+\\-])(?!(?:no-?reply|noreply|notifications?|mailer|devops|deploy|alerts?|postmaster|abuse|hostmaster|bounce|daemon|robot|donotreply|do-not-reply)@)[a-zA-Z0-9._%+\\-]+@(?![a-zA-Z0-9.\\-]*\\.gserviceaccount\\.com)[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}",
       "confidence": 0.92,
       "level": "standard",
       "reason": "Email address"
@@ -487,13 +533,13 @@
     },
     "git_config_username": {
       "pattern": "(?<![A-Za-z0-9])git\\s+config\\s+(?:--\\S+\\s+)*user\\.name\\s+['\\\"]([^'\\\"]+)['\\\"]",
-      "confidence": 0.95,
+      "confidence": 0.75,
       "level": "standard",
       "reason": "Git config committer name"
     },
     "git_config_email": {
       "pattern": "(?<![A-Za-z0-9])git\\s+config\\s+(?:--\\S+\\s+)*user\\.email\\s+['\\\"]([^'\\\"]+)['\\\"]",
-      "confidence": 0.95,
+      "confidence": 0.75,
       "level": "standard",
       "reason": "Git config committer email"
     },
@@ -532,12 +578,6 @@
       "confidence": 0.97,
       "level": "minimal",
       "reason": "Password in semicolon-delimited connection string"
-    },
-    "connstr_userid_inline": {
-      "pattern": "(?i)(?<![A-Za-z0-9])User\\s+ID\\s*=\\s*([^;\\s'\\\"<>]{3,})\\s*;",
-      "confidence": 0.9,
-      "level": "standard",
-      "reason": "User ID in semicolon-delimited connection string"
     },
     "uuid": {
       "pattern": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b",
@@ -654,7 +694,7 @@
       "reason": "Terraform resource name label"
     },
     "bitcoin_address": {
-      "pattern": "(?=[0-9A-Za-z]*[A-Za-z])\\b(?:bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,45})\\b",
+      "pattern": "(?=[0-9A-Za-z]*[A-Za-z])\\b(?:bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,33})\\b",
       "confidence": 0.9,
       "level": "standard",
       "reason": "Bitcoin address"
@@ -725,12 +765,6 @@
       "level": "standard",
       "reason": "doppler token (personal/service/service-account/CLI)"
     },
-    "digitalocean_pat": {
-      "pattern": "\\bdop_v1_[a-f0-9]{64}\\b",
-      "confidence": 0.98,
-      "level": "standard",
-      "reason": "digitalocean pat"
-    },
     "databricks_token": {
       "pattern": "\\bdapi[a-f0-9]{32}\\b",
       "confidence": 0.9,
@@ -761,23 +795,11 @@
       "level": "standard",
       "reason": "postman token"
     },
-    "hashicorp_tf_token": {
-      "pattern": "\\b[a-z0-9]{14}\\.atlasv1\\.[a-z0-9\\-_=]{60,70}\\b",
-      "confidence": 0.97,
-      "level": "standard",
-      "reason": "hashicorp tf token"
-    },
     "grafana_cloud_token": {
       "pattern": "\\bglc_[A-Za-z0-9+/]{32,400}={0,3}",
       "confidence": 0.95,
       "level": "standard",
       "reason": "grafana cloud token"
-    },
-    "linear_api_key": {
-      "pattern": "\\blin_api_[a-zA-Z0-9]{40}\\b",
-      "confidence": 0.97,
-      "level": "standard",
-      "reason": "linear api key"
     },
     "dynatrace_token": {
       "pattern": "\\bdt0c01\\.[A-Z0-9]{24}\\.[A-Z0-9]{64}\\b",
@@ -900,25 +922,25 @@
         "pattern": "\\{\\{\\s*ref\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)\\s*\\}\\}",
         "confidence": 0.97,
         "level": "strict",
-        "reason": "dbt {{ ref() }} — internal model name"
+        "reason": "dbt {{ ref() }} \u2014 internal model name"
       },
       "dbt_source_name": {
         "pattern": "\\{\\{\\s*source\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]",
         "confidence": 0.97,
         "level": "strict",
-        "reason": "dbt {{ source() }} — source name"
+        "reason": "dbt {{ source() }} \u2014 source name"
       },
       "dbt_source_table": {
         "pattern": "\\{\\{\\s*source\\s*\\([^,]+,\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)\\s*\\}\\}",
         "confidence": 0.97,
         "level": "strict",
-        "reason": "dbt {{ source() }} — table name"
+        "reason": "dbt {{ source() }} \u2014 table name"
       },
       "dbt_var": {
         "pattern": "\\{\\{\\s*var\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)\\s*\\}\\}",
         "confidence": 0.88,
         "level": "strict",
-        "reason": "dbt {{ var() }} — variable name"
+        "reason": "dbt {{ var() }} \u2014 variable name"
       },
       "sql_schema_table": {
         "pattern": "(?i)(?:from|join)\\s+([a-zA-Z][a-zA-Z0-9_]{1,63}\\.[a-zA-Z][a-zA-Z0-9_]{1,63})\\b",
@@ -1803,25 +1825,25 @@
     },
     "freetext": {
       "prose_password": {
-        "pattern": "(?i)\\bpassword\\s*(?:is|was|:)\\s*[\"\\']?([^\\s\"\\',.()]{6,})[\"\\']?",
+        "pattern": "(?i)\\bpassword\\s*(?:is|was|:)\\s*[\"\\']?([^\\s\"\\',.():]{6,})[\"\\']?",
         "confidence": 0.88,
         "level": "minimal",
         "reason": "Password mentioned in prose"
       },
       "prose_credential": {
-        "pattern": "(?i)\\b(?:credentials?|passphrase|secret)\\s*[:\\-–]\\s*[\"\\']?([^\\s\"\\',.]{6,})[\"\\']?",
+        "pattern": "(?i)\\b(?:credentials?|passphrase|secret)\\s*[:\\-\u2013]\\s*[\"\\']?([^\\s\"\\',.`]{9,})[\"\\']?",
         "confidence": 0.87,
         "level": "minimal",
         "reason": "Credential value in prose"
       },
       "prose_api_key": {
-        "pattern": "(?i)\\bapi\\s+key\\s*[:\\-–is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{16,})[\"\\']?",
+        "pattern": "(?i)\\bapi\\s+key\\s*[:\\-\u2013is]+\\s*[\"\\']?([a-zA-Z0-9\\-_.]{16,})[\"\\']?",
         "confidence": 0.88,
         "level": "minimal",
         "reason": "API key value in prose"
       },
       "prose_token": {
-        "pattern": "(?i)\\btoken\\s*(?::|=|\\bis\\b|[-–](?=\\s))\\s*[\\\"']?([a-zA-Z0-9\\-_.]{20,})[\\\"']?",
+        "pattern": "(?i)\\btoken\\s*(?::|=|\\bis\\b|[-\u2013](?=\\s))\\s*[\\\"']?([a-zA-Z0-9\\-_.]{20,})[\\\"']?",
         "confidence": 0.86,
         "level": "minimal",
         "reason": "Token value in prose"
@@ -1846,7 +1868,7 @@
       },
       "prose_ip_address": {
         "pattern": "\\b(10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b",
-        "confidence": 0.88,
+        "confidence": 0.7,
         "level": "standard",
         "reason": "Private IP address in prose"
       },
@@ -1863,7 +1885,7 @@
         "reason": "AWS access key in prose"
       },
       "prose_generic_key": {
-        "pattern": "(?i)\\b(?:key|secret)\\s*(?::|=|[-–](?=\\s))\\s*[\\\"']?([a-zA-Z0-9\\-_/+]{20,})[\\\"']?",
+        "pattern": "(?i)\\b(?:key|secret)\\s*(?::|=|[-\u2013](?=\\s))\\s*[\\\"']?([a-zA-Z0-9\\-_/+]{20,})[\\\"']?",
         "confidence": 0.82,
         "level": "minimal",
         "reason": "Generic key/secret value in prose"
@@ -1982,7 +2004,10 @@
   },
   "false_positive_values": [
     "0.0.0.0",
+    "0123456789abcdef",
     "127.0.0.1",
+    "AKIAIOSFODNN7EXAMPLE",
+    "AKIAIOSFODNN7TESTING",
     "change-me",
     "change_me",
     "changeit",
@@ -1999,6 +2024,7 @@
     "example.com",
     "false",
     "fixme",
+    "git@github.com",
     "info",
     "localhost",
     "masked",
@@ -2016,26 +2042,29 @@
     "required",
     "sample",
     "secret",
+    "smtp.gmail.com",
+    "smtp.office365.com",
+    "smtp.sendgrid.net",
     "staging",
+    "svc_api",
     "test",
+    "test-jwt-secret-not-for-production",
+    "test@example.com",
     "testing",
     "todo",
     "trace",
     "true",
     "undefined",
     "unknown",
+    "user@example.com",
     "utf-16",
     "utf-8",
     "utf8",
     "warn",
     "warning",
     "yes",
-    "your_password_here",
-    "git@github.com",
     "you@example.com",
-    "user@example.com",
-    "test@example.com",
-    "0123456789abcdef"
+    "your_password_here"
   ],
   "public_url_domains": [
     "google.com",
@@ -2056,10 +2085,10 @@
     "wikipedia.org"
   ],
   "lang_packs": {
-    "_comment": "Language packs — PII/secret patterns keyed by non-English keywords (Hebrew, Russian, Arabic, Spanish, French). Loaded into the universal set by regex_rules_safe.py; select with LOCALMASK_LANGS=he,ru (default: all, 'none' disables). Adding a language = adding a block here, no code changes. israeli_id and spanish_dni are checksum-validated in engine.py.",
+    "_comment": "Language packs \u2014 PII/secret patterns keyed by non-English keywords (Hebrew, Russian, Arabic, Spanish, French). Loaded into the universal set by regex_rules_safe.py; select with LOCALMASK_LANGS=he,ru (default: all, 'none' disables). Adding a language = adding a block here, no code changes. israeli_id and spanish_dni are checksum-validated in engine.py.",
     "he": {
       "israeli_id": {
-        "pattern": "(?:תעודת[\\s-]?זהות|מספר[\\s-]?זהות|ת\\s?[\"״']\\s?ז|ת\\.\\s?ז\\.?|\\bתז\\b|israeli[_\\s.-]?id|teudat[_\\s.-]?zehut)\\D{0,20}?(?<!\\w)(\\d{7,9})(?![\\d\\w])",
+        "pattern": "(?:\u05ea\u05e2\u05d5\u05d3\u05ea[\\s-]?\u05d6\u05d4\u05d5\u05ea|\u05de\u05e1\u05e4\u05e8[\\s-]?\u05d6\u05d4\u05d5\u05ea|\u05ea\\s?[\"\u05f4']\\s?\u05d6|\u05ea\\.\\s?\u05d6\\.?|\\b\u05ea\u05d6\\b|israeli[_\\s.-]?id|teudat[_\\s.-]?zehut)\\D{0,20}?(?<!\\w)(\\d{7,9})(?![\\d\\w])",
         "confidence": 0.93,
         "level": "minimal",
         "reason": "Israeli ID number (Teudat Zehut, checksum-validated PII)"
@@ -2071,13 +2100,13 @@
         "reason": "Israeli phone number (PII)"
       },
       "hebrew_address": {
-        "pattern": "(?:רחוב|רח['׳]?\\.?|שדרות|שד['׳]?\\.?)\\s+[֐-׿]{2,}(?:\\s+[֐-׿]{2,}){0,2}\\s+\\d{1,4}\\b",
+        "pattern": "(?:\u05e8\u05d7\u05d5\u05d1|\u05e8\u05d7['\u05f3]?\\.?|\u05e9\u05d3\u05e8\u05d5\u05ea|\u05e9\u05d3['\u05f3]?\\.?)\\s+[\u0590-\u05ff]{2,}(?:\\s+[\u0590-\u05ff]{2,}){0,2}\\s+\\d{1,4}\\b",
         "confidence": 0.8,
         "level": "standard",
         "reason": "Israeli street address (PII)"
       },
       "hebrew_name": {
-        "pattern": "שם\\s+(?:מלא|פרטי|משפחה|לקוח|הלקוח|עובד|העובד|משתמש|המשתמש)\\s*[:=\\-]\\s*([֐-׿]{2,}(?:\\s+[֐-׿]{2,}){0,2})",
+        "pattern": "\u05e9\u05dd\\s+(?:\u05de\u05dc\u05d0|\u05e4\u05e8\u05d8\u05d9|\u05de\u05e9\u05e4\u05d7\u05d4|\u05dc\u05e7\u05d5\u05d7|\u05d4\u05dc\u05e7\u05d5\u05d7|\u05e2\u05d5\u05d1\u05d3|\u05d4\u05e2\u05d5\u05d1\u05d3|\u05de\u05e9\u05ea\u05de\u05e9|\u05d4\u05de\u05e9\u05ea\u05de\u05e9)\\s*[:=\\-]\\s*([\u0590-\u05ff]{2,}(?:\\s+[\u0590-\u05ff]{2,}){0,2})",
         "confidence": 0.85,
         "level": "standard",
         "reason": "Person name labeled in Hebrew (PII)"
@@ -2091,7 +2120,7 @@
         "reason": "Russian phone number (PII)"
       },
       "russian_passport": {
-        "pattern": "(?:паспорт\\w*|серия\\s+и\\s+номер)\\D{0,15}?(?<!\\w)(\\d{4}[\\s-]?\\d{6})(?![\\d\\w])",
+        "pattern": "(?:\u043f\u0430\u0441\u043f\u043e\u0440\u0442\\w*|\u0441\u0435\u0440\u0438\u044f\\s+\u0438\\s+\u043d\u043e\u043c\u0435\u0440)\\D{0,15}?(?<!\\w)(\\d{4}[\\s-]?\\d{6})(?![\\d\\w])",
         "confidence": 0.88,
         "level": "standard",
         "reason": "Russian passport series+number labeled (PII)"
@@ -2099,13 +2128,13 @@
     },
     "ar": {
       "arabic_phone": {
-        "pattern": "(?:هاتف|جوال|موبايل|رقم\\s+الهاتف)\\D{0,10}?(?<![\\w+])(\\+?\\d(?:[\\s-]?\\d){8,13})(?![\\d\\w])",
+        "pattern": "(?:\u0647\u0627\u062a\u0641|\u062c\u0648\u0627\u0644|\u0645\u0648\u0628\u0627\u064a\u0644|\u0631\u0642\u0645\\s+\u0627\u0644\u0647\u0627\u062a\u0641)\\D{0,10}?(?<![\\w+])(\\+?\\d(?:[\\s-]?\\d){8,13})(?![\\d\\w])",
         "confidence": 0.85,
         "level": "standard",
         "reason": "Phone number labeled in Arabic (PII)"
       },
       "arabic_national_id": {
-        "pattern": "(?:رقم\\s+الهوية|الرقم\\s+القومي|هوية\\s+وطنية)\\D{0,12}?(?<!\\w)(\\d{10,14})(?![\\d\\w])",
+        "pattern": "(?:\u0631\u0642\u0645\\s+\u0627\u0644\u0647\u0648\u064a\u0629|\u0627\u0644\u0631\u0642\u0645\\s+\u0627\u0644\u0642\u0648\u0645\u064a|\u0647\u0648\u064a\u0629\\s+\u0648\u0637\u0646\u064a\u0629)\\D{0,12}?(?<!\\w)(\\d{10,14})(?![\\d\\w])",
         "confidence": 0.85,
         "level": "standard",
         "reason": "National ID labeled in Arabic (PII)"
@@ -2113,7 +2142,7 @@
     },
     "es": {
       "spanish_dni": {
-        "pattern": "\\b(?:DNI|NIE)\\b\\s*(?:n[º°o]?\\.?\\s*)?[:=\\-]?\\s*(?<![\\d\\w])(\\d{8}\\s?-?\\s?[A-Za-z])\\b",
+        "pattern": "\\b(?:DNI|NIE)\\b\\s*(?:n[\u00ba\u00b0o]?\\.?\\s*)?[:=\\-]?\\s*(?<![\\d\\w])(\\d{8}\\s?-?\\s?[A-Za-z])\\b",
         "confidence": 0.9,
         "level": "minimal",
         "reason": "Spanish DNI/NIE (control-letter-validated PII)"
@@ -2171,7 +2200,7 @@
     }
   },
   "money": {
-    "_comment": "Finance Mode vocabulary — data-driven like everything else. categories: keyword→category for the per-category secret bases; extra_keywords: anchor words that make a bare number a money amount without deciding its category. Customers add their own terms here (or via the money section of settings) — no code changes.",
+    "_comment": "Finance Mode vocabulary \u2014 data-driven like everything else. categories: keyword\u2192category for the per-category secret bases; extra_keywords: anchor words that make a bare number a money amount without deciding its category. Customers add their own terms here (or via the money section of settings) \u2014 no code changes.",
     "categories": {
       "salary": [
         "salary",
@@ -2187,12 +2216,12 @@
         "salarii",
         "bonusuri",
         "comision",
-        "שכר",
-        "משכורת",
-        "משכורות",
-        "בונוס",
-        "פרמיה",
-        "עמלה"
+        "\u05e9\u05db\u05e8",
+        "\u05de\u05e9\u05db\u05d5\u05e8\u05ea",
+        "\u05de\u05e9\u05db\u05d5\u05e8\u05d5\u05ea",
+        "\u05d1\u05d5\u05e0\u05d5\u05e1",
+        "\u05e4\u05e8\u05de\u05d9\u05d4",
+        "\u05e2\u05de\u05dc\u05d4"
       ],
       "revenue": [
         "revenue",
@@ -2205,10 +2234,10 @@
         "venit",
         "venituri",
         "cifra de afaceri",
-        "הכנסה",
-        "הכנסות",
-        "מחזור",
-        "פדיון"
+        "\u05d4\u05db\u05e0\u05e1\u05d4",
+        "\u05d4\u05db\u05e0\u05e1\u05d5\u05ea",
+        "\u05de\u05d7\u05d6\u05d5\u05e8",
+        "\u05e4\u05d3\u05d9\u05d5\u05df"
       ],
       "price": [
         "price",
@@ -2227,27 +2256,27 @@
         "subtotal",
         "vat",
         "discount",
-        "preț",
+        "pre\u021b",
         "pret",
-        "plată",
+        "plat\u0103",
         "plata",
-        "factură",
+        "factur\u0103",
         "factura",
         "buget",
-        "taxă",
+        "tax\u0103",
         "taxa",
         "tarif",
-        "מחיר",
-        "עלות",
-        "תשלום",
-        "חשבונית",
-        "תקציב",
-        "הוצאה",
-        "הוצאות",
-        "מע\"מ",
-        "הנחה",
-        "זיכוי",
-        "החזר"
+        "\u05de\u05d7\u05d9\u05e8",
+        "\u05e2\u05dc\u05d5\u05ea",
+        "\u05ea\u05e9\u05dc\u05d5\u05dd",
+        "\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea",
+        "\u05ea\u05e7\u05e6\u05d9\u05d1",
+        "\u05d4\u05d5\u05e6\u05d0\u05d4",
+        "\u05d4\u05d5\u05e6\u05d0\u05d5\u05ea",
+        "\u05de\u05e2\"\u05de",
+        "\u05d4\u05e0\u05d7\u05d4",
+        "\u05d6\u05d9\u05db\u05d5\u05d9",
+        "\u05d4\u05d7\u05d6\u05e8"
       ]
     },
     "extra_keywords": [
@@ -2262,12 +2291,12 @@
       "grant",
       "funding",
       "valuation",
-      "סכום",
-      "סה\"כ",
-      "יתרה",
-      "הלוואה",
-      "מקדמה",
-      "מימון"
+      "\u05e1\u05db\u05d5\u05dd",
+      "\u05e1\u05d4\"\u05db",
+      "\u05d9\u05ea\u05e8\u05d4",
+      "\u05d4\u05dc\u05d5\u05d5\u05d0\u05d4",
+      "\u05de\u05e7\u05d3\u05de\u05d4",
+      "\u05de\u05d9\u05de\u05d5\u05df"
     ]
   }
 }

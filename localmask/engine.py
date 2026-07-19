@@ -78,8 +78,8 @@ _VALUE_PREFIX_TYPES = [
     ("hvs.",            "vault_token"),
     ("sk_live_",        "stripe_secret_key"),
     ("sk_test_",        "stripe_test_key"),
-    ("pk_live_",        "stripe_public_key"),
-    ("pk_test_",        "stripe_public_key"),
+    # pk_live_ / pk_test_ are Stripe PUBLISHABLE keys — designed to be public,
+    # not secrets. Detecting them as sensitive causes FPs in every frontend.
     ("SG.",             "sendgrid_api_key"),
     ("AKIA",            "aws_access_key_id"),
     ("whsec_",          "stripe_webhook_secret"),
@@ -341,7 +341,11 @@ _HASH_TEMPLATE = re.compile(r"#\w+#")
 # host form so leetspeak keys like acme_tw1l10_4uth_… are NOT swallowed.
 _NONSECRET_VALUE = re.compile(
     r"(?:[a-z0-9][a-z0-9-]*\.)+[a-z]{2,}"          # domain / FQDN
-    r"|\d+:\d+:[a-z]+:[0-9a-f]+", re.I)             # firebase appId
+    r"|\d+:\d+:[a-z]+:[0-9a-f]+"                   # firebase appId
+    r"|pk_(?:live|test)_[0-9a-zA-Z]{24,}"          # Stripe publishable key (public by design)
+    r"|AC[0-9a-fA-F]{32}"                           # Twilio Account SID (public identifier)
+    r"|(?:postgres|postgresql|mysql|mongodb|redis|mssql|rediss)://[^\s@]{5,}$",  # DB URL without embedded creds (no @)
+    re.I)
 _HEX_TOKEN = re.compile(r"[0-9a-fA-F]{32,}")
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
                    r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
@@ -890,9 +894,11 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         "password_unquoted", "unquoted_env_secret", "any_env_password",
         "any_env_secret", "any_env_token", "tf_hcl_secret",
         "java_properties_password",
-        # Already high-precision: FCM keys have a fixed shape, and a base64
-        # blob we DECODED and re-scanned is verified — don't second-guess.
-        "fcm_server_key", "base64_encoded_secret",
+        # Already high-precision: FCM keys have a fixed shape.
+        # base64_encoded_secret: strong case (conf 0.9) skips via the ≥0.9
+        # threshold; weak case (conf 0.8, just a secret-named field) goes
+        # through LLM so placeholder blobs like "test-encryption-key" are caught.
+        "fcm_server_key",
     }
 
     if bert and raw_detections and not session.get("skip_llm"):
@@ -945,10 +951,13 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
                     det["llm_reason"] = "classifier time budget reached — kept"
                     filtered.append(det)
             else:
+                _path_prefix = f"[{rel_path}] "
                 batch_items = [
                     {
                         "entity": det["entity"],
-                        "context": det.get("context", "")[:200],
+                        # Prefix context with file path so LLM can tell
+                        # test/fixture/docs files from production configs.
+                        "context": (_path_prefix + det.get("context", ""))[:200],
                         "file_type": det.get("file_type", file_ext),
                         "ner_label": det.get("ner_label", ""),
                     }
@@ -967,6 +976,23 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
                         if result["decision"] == "NOT_SENSITIVE":
                             continue  # LLM says skip
                         det["confidence"] = round(result.get("probability", 0.85), 3)
+                        # Refine the detected type if LLM predicted one with
+                        # high confidence and the current type is generic.
+                        pt = result.get("predicted_type", "")
+                        # Semi-generic types where LLM's predicted_type is
+                        # more reliable than the regex label.
+                        _generic = {
+                            "generic_secret", "secret", "entropy_secret",
+                            "api_key", "generic_api_key", "env_api_key",
+                            "yaml_api_key", "generic_token", "env_token",
+                            "unquoted_env_secret", "json_camelcase_secret",
+                            "json_camelcase_apikey",
+                        }
+                        if (pt and det.get("llm_confidence", 0) >= 0.80
+                                and det.get("type", det.get("subtype", ""))
+                                in _generic):
+                            det["type"] = pt
+                            det["subtype"] = pt
                     filtered.append(det)
 
         raw_detections = filtered
