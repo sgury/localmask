@@ -4,7 +4,7 @@ All notable changes to LocalMask. Dates are release dates.
 
 ## 0.9.5 — 2026-07-19
 
-Detection precision release: -49% false positives on the 11-repo test suite,
+Detection precision release: -48% false positives on the 11-repo test suite,
 detection rate held at 99%.
 
 ### Changed
@@ -44,6 +44,11 @@ detection rate held at 99%.
 - **Known false-positive values added** — `smtp.gmail.com`, `smtp.office365.com`,
   `smtp.sendgrid.net`, `svc_api`, `test-jwt-secret-not-for-production`,
   `AKIAIOSFODNN7TESTING`, `AKIAIOSFODNN7EXAMPLE`.
+- **`unquoted_env_secret` now detects env vars inside Python/YAML strings** —
+  `"PGPASSWORD=Str0ng!Db2024"` and similar patterns (env var embedded in a string
+  literal inside a test list or config) are now detected. Previously, the `^`
+  line-start anchor prevented any match when the env var was preceded by a quote.
+  Fixed by allowing the match after a quote character (`(?:^|(?<=['"]))`).
 
 ### Pro
 - **LLM context now includes file path** — every detection sent to the Ollama

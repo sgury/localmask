@@ -460,7 +460,7 @@
       "reason": "Login function password argument"
     },
     "unquoted_env_secret": {
-      "pattern": "(?m)^(?:export\\s+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|APIKEY|API_KEY)[A-Z0-9_]*\\s*=\\s*([^\\s#'\\\"\\[,$()]{10,})",
+      "pattern": "(?m)(?:^|(?<=['\\\"]))[\\t ]*(?:export\\s+)?[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|KEY|APIKEY|API_KEY)[A-Z0-9_]*\\s*=\\s*([^\\s#'\\\"\\[,$()]{10,})",
       "confidence": 0.95,
       "level": "minimal",
       "reason": "Secret env var (unquoted)"
