@@ -17,13 +17,14 @@ sync, and a CLI + MCP server. No AI model, no cloud, no account.
   can compare and compute (Dana earns 1.2× John), but the absolute amounts,
   the currency and the scale never leave your machine. Enable with
   `LOCALMASK_MONEY_MODE=relative`. See **Finance Mode** below.
-- **8 language packs** — PII labeled in non-English code and comments:
+- **9 language packs** — PII labeled in non-English code and comments:
   **Romanian** (CNP, checksum-validated), **Hebrew** (Israeli ID ת״ז,
   check-digit-validated, phones, addresses), **Russian** (passports),
   **Arabic** (national IDs), **Spanish** (DNI, letter-validated), **French**,
-  **German** (Steuernummer), **Italian** (codice fiscale) — plus passwords
-  labeled in each language. Select with `LOCALMASK_LANGS=ro,he,de`
-  (default: all).
+  **German** (Steuernummer), **Italian** (codice fiscale), **Hindi** (PAN,
+  Aadhaar, GSTIN) — plus customer, order, invoice &amp; booking IDs in each
+  language. Select with `LOCALMASK_LANGS=ro,he,in`
+  (default: none — opt in per language).
 - **Boundary-hardened engine** — no pattern (and no mask) can ever grab a
   substring of a longer token: a key inside a hex/base64 blob is never falsely
   matched, and masking never corrupts a file. Verified on numpy (2,300+ files,
@@ -320,11 +321,11 @@ numbers (ports, versions, IDs) never are. The vocabulary is editable in
 `regex_patterns.json` (add your own domain terms, no code). Full details and
 the honest threat model: [FINANCE.md](FINANCE.md).
 
-## Multilingual detection — 8 language packs
+## Multilingual detection — 9 language packs
 
 Secrets and PII don't only hide in English. LocalMask ships keyword patterns
-for **Romanian, Hebrew, Russian, Arabic, Spanish, French, German and
-Italian**:
+for **Romanian, Hebrew, Russian, Arabic, Spanish, French, German, Italian,
+and Hindi**:
 
 ```text
 // CNP: 1850301401008             ← Romanian CNP, checksum-validated
@@ -338,7 +339,8 @@ Italian**:
 National IDs are checksum-validated (a random 13-digit number near "CNP"
 does NOT match), and every pattern is word-boundary guarded so digits inside
 a longer key or hash never fire. Pick packs with `LOCALMASK_LANGS=ro,he,de`
-(default: all; `none` disables). Adding a language is a JSON block in
+(default: none — opt in to avoid unexpected FPs from languages you don't use;
+`all` enables everything). Adding a language is a JSON block in
 `regex_patterns.json` — no code.
 
 ## Using AI with LocalMask (free)
