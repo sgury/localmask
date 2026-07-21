@@ -47,7 +47,9 @@ def _load_pattern_data():
         universal = dict(data.get("universal", {}))
         # Language packs: same entry shape as universal, grouped per language
         # under "lang_packs" (Hebrew ת"ז / Russian паспорт / Spanish DNI …).
-        # LOCALMASK_LANGS selects packs ("he,ru"); default all, "none" = off.
+        # LOCALMASK_LANGS selects packs ("he,ru"); default none, "all" = all.
+        # Default is none so users explicitly opt in to their language(s) —
+        # avoids unexpected FPs from patterns for languages you don't use.
         packs = data.get("lang_packs", {}) or {}
         want = os.environ.get("LOCALMASK_LANGS", "").strip().lower()
         if not want:
@@ -58,7 +60,7 @@ def _load_pattern_data():
                            or get_setting("langs", "")).strip().lower()
             except Exception:
                 want = ""
-        if want in ("", "all"):
+        if want == "all":
             selected = [k for k in packs if not k.startswith("_")]
         elif want in ("none", "off", "0"):
             selected = []

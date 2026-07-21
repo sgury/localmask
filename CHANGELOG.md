@@ -2,6 +2,30 @@
 
 All notable changes to LocalMask. Dates are release dates.
 
+## 0.9.6 — 2026-07-22
+
+Expanded PII detection and 9th language pack (India).
+
+### Added
+- **DOB / date-of-birth** — labeled patterns (`dob:`, `birth_date:`, `birthday:`, `birth_day:`)
+- **CVV / card security code** — `cvv:`, `cvc:`, `security_code:`, `atm_pin:`, `card_pin:`, `pin_number:` (3–6 digits)
+- **Card expiry** — `expiry:`, `exp_date:`, `card_expiry:`, `valid_thru:` (MM/YY and MM/YYYY formats)
+- **Passport number** — `passport:`, `passport_no:`, `passport_number:` (flexible label)
+- **National ID** — `national_id:`, `national_number:`, `civil_id:`, `personal_id:`, `voter_id:`, `resident_id:`, `tax_id:` (flexible label)
+- **UK National Insurance number** — `NI` + `[A-Z]{2}[0-9]{6}[ABCD]` (case-sensitive, requires label)
+- **GPS coordinates** — labeled `latitude:` / `longitude:` or bare `lat:` / `lon:` decimal pairs
+- **URL query secrets** — `?api_key=`, `?token=`, `?secret=`, `?pwd=`, `?pass=`, `?session_token=`, `?refresh_token=`, `?oauth_token=`, `?auth_code=`, `?id_token=`, `?subscription_key=`
+- **VIN** — labeled `vin:`, `chassis:`, `frame_no:` (17-char alphanumeric, case-sensitive format guard)
+- **License plate** — labeled `plate:`, `license_plate:`, `car_plate:`, `car_reg:` (case-sensitive value guard)
+- **India language pack** — PAN (`AAAAA9999A` format, checksum-validated), Aadhaar (12-digit, Luhn-validated), GSTIN (15-char, case-sensitive)
+- **9 language packs total**: Romania · Hebrew · Russian · Arabic · Spanish · French · German · Italian · Hindi
+- **Customer/order/invoice/booking IDs** — all 9 lang packs now include native-language keywords for order, invoice, booking/reservation, contract, and reference numbers
+
+### Changed
+- **`LOCALMASK_LANGS` default changed from `all` to `none`** — language packs must now be explicitly opted in. Set `LOCALMASK_LANGS=he,ru` (or `all`) to enable. Avoids unexpected FPs from patterns for languages you don't use.
+- **`labeled_customer_id`** extended with order, invoice, booking, reservation, contract, reference, ticket, transaction, case keywords
+- **`prefixed_customer_id`** extended with `ORD-`, `INV-`, `TXN-`, `TKT-`, `TICKET-`, `BKG-`, `CASE-`, `REF-` prefixes
+
 ## 0.9.5 — 2026-07-19
 
 Detection precision release: -48% false positives on the 11-repo test suite,
