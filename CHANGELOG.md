@@ -2,6 +2,16 @@
 
 All notable changes to LocalMask. Dates are release dates.
 
+## 0.9.7 — 2026-07-22
+
+Language pack edition gate.
+
+### Added
+- **Language pack edition gate** — all non-English language packs except Hebrew (`he`) now require LocalMask Pro. Hebrew and English patterns stay free in all editions. Attempting to load a gated pack without a Pro license prints a clear upgrade notice and falls back to free packs only. Set `LOCALMASK_LANGS=he` or leave unset for free usage.
+
+### Changed
+- Benchmark / recall test suite removed from the source tree (see release notes for accuracy figures: ~97% recall on 11-repo corpus).
+
 ## 0.9.6 — 2026-07-22
 
 Expanded PII detection and 9th language pack (India).

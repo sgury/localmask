@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localmask"
-version = "0.9.6.post1"
+version = "0.9.7"
 description = "Privacy-first secret & PII masking for code — 100% local, no phone-home."
 readme = "README.md"
 requires-python = ">=3.10"

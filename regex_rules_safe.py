@@ -66,6 +66,24 @@ def _load_pattern_data():
             selected = []
         else:
             selected = [l.strip() for l in want.split(",") if l.strip()]
+
+        # Gate non-free language packs to Pro and above.
+        # Hebrew ('he') is free; English patterns live in universal (always free).
+        _FREE_LANG_PACKS = {"he"}
+        try:
+            from localmask._edition import has_capability as _has_cap
+            _lang_pro = _has_cap("lang_packs")
+        except Exception:
+            _lang_pro = False
+        _blocked = [l for l in selected if l not in _FREE_LANG_PACKS and not _lang_pro]
+        if _blocked:
+            print(
+                f"[localmask] Language pack(s) {_blocked} require LocalMask Pro — "
+                f"running with free packs only (he, en). "
+                f"Upgrade at https://localmaskpro.com"
+            )
+        selected = [l for l in selected if l in _FREE_LANG_PACKS or _lang_pro]
+
         for lang in selected:
             for name, body in (packs.get(lang) or {}).items():
                 universal.setdefault(name, body)

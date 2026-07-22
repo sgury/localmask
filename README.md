@@ -11,20 +11,17 @@ The free edition is open source and runs entirely offline: a 27+ pattern regex
 engine, entropy detection, masking + rehydrate, a publishable masked repo, git
 sync, and a CLI + MCP server. No AI model, no cloud, no account.
 
-### New in this version
+### New in 0.9.7
+- **Language pack edition gate** — Hebrew (`he`) and English detection stay free. All other language packs (ru, es, ro, ar, de, fr, it, hi) now require LocalMask Pro. A clear upgrade notice is printed if a gated pack is requested without a license. Set `LOCALMASK_LANGS=he` or leave unset for free usage.
+
+### New in 0.9.6
 - **Finance Mode (relative)** — share financial *analysis* with an AI without
   sharing a single real figure. `$42,000` becomes `(0.42*R_SALARY)`: the AI
   can compare and compute (Dana earns 1.2× John), but the absolute amounts,
   the currency and the scale never leave your machine. Enable with
   `LOCALMASK_MONEY_MODE=relative`. See **Finance Mode** below.
-- **9 language packs** — PII labeled in non-English code and comments:
-  **Romanian** (CNP, checksum-validated), **Hebrew** (Israeli ID ת״ז,
-  check-digit-validated, phones, addresses), **Russian** (passports),
-  **Arabic** (national IDs), **Spanish** (DNI, letter-validated), **French**,
-  **German** (Steuernummer), **Italian** (codice fiscale), **Hindi** (PAN,
-  Aadhaar, GSTIN) — plus customer, order, invoice &amp; booking IDs in each
-  language. Select with `LOCALMASK_LANGS=ro,he,in`
-  (default: none — opt in per language).
+- **9 language packs** — PII labeled in non-English code and comments.
+  Hebrew free; others require Pro (see above).
 - **Boundary-hardened engine** — no pattern (and no mask) can ever grab a
   substring of a longer token: a key inside a hex/base64 blob is never falsely
   matched, and masking never corrupts a file. Verified on numpy (2,300+ files,
@@ -197,7 +194,7 @@ it drops straight into any gate.
 ```yaml
 repos:
   - repo: https://github.com/sgury/localmask
-    rev: v0.9.3
+    rev: v0.9.7
     hooks:
       - id: localmask
 ```
@@ -212,7 +209,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: sgury/localmask@v0.9.3
+      - uses: sgury/localmask@v0.9.7
 ```
 
 Both run 100% locally on the runner — nothing leaves it.
@@ -338,10 +335,14 @@ and Hindi**:
 
 National IDs are checksum-validated (a random 13-digit number near "CNP"
 does NOT match), and every pattern is word-boundary guarded so digits inside
-a longer key or hash never fire. Pick packs with `LOCALMASK_LANGS=ro,he,de`
-(default: none — opt in to avoid unexpected FPs from languages you don't use;
-`all` enables everything). Adding a language is a JSON block in
-`regex_patterns.json` — no code.
+a longer key or hash never fire. Pick packs with `LOCALMASK_LANGS=he`
+(default: none — opt in to avoid unexpected FPs from languages you don't use).
+
+**Edition note:** **Hebrew (`he`) is free.** All other language packs
+(ro, ru, es, ar, de, fr, it, hi) require [LocalMask Pro](https://localmaskpro.com).
+A clear upgrade notice is printed if a gated pack is loaded without a license;
+detection falls back to free packs automatically. Adding a language is a JSON
+block in `regex_patterns.json` — no code.
 
 ## Using AI with LocalMask (free)
 
@@ -449,6 +450,13 @@ Everything is local. There is no telemetry and no network call in the free editi
 | AI proxy — masking before your AI / gateway | — | ✓ | ✓ |
 | Team-shared vault (consistent tokens across machines) | — | — | ✓ |
 | Org shared rules · LDAP/AD · SSO | — | — | ✓ |
+
+## Detection accuracy
+
+The engine reaches ~97% recall with ~3% false-positive rate on an 11-repo
+mixed-language test corpus (Python, JS, Go, YAML, Terraform, SQL). Benchmark
+methodology and per-repo breakdowns are published in the release notes at
+[localmaskpro.com/changelog](https://localmaskpro.com/changelog).
 
 ## Feedback
 
