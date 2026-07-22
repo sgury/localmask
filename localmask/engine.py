@@ -28,7 +28,8 @@ TEXT_EXTS  = {".sql", ".py", ".yaml", ".yml", ".env", ".json", ".xml",
               ".html", ".css", ".ipynb", ".r", ".scala",
               ".swift", ".kt", ".kts", ".gradle", ".properties", ".plist",
               ".rst", ".adoc", ".csproj", ".props", ".bash", ".zsh",
-              ".cls", ".trigger", ".apex"}
+              ".cls", ".trigger", ".apex",
+              ".key", ".pem", ".crt", ".cer", ".pub"}
 
 # Basenames (no extension) that should be scanned
 _TEXT_BASENAMES = {"dockerfile", "makefile", "fastfile", "gemfile",

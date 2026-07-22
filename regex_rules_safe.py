@@ -159,6 +159,7 @@ class RegexRulesSafe:
         "dockerfile": "dockerfile",
         "ini": "ini", "cfg": "ini", "conf": "ini",
         "md": "freetext", "txt": "freetext", "rst": "freetext", "adoc": "freetext",
+        "key": "freetext", "pem": "freetext", "crt": "freetext", "cer": "freetext",
     }
 
     @classmethod
