@@ -478,7 +478,7 @@
       "reason": "Database connection URL with credentials"
     },
     "us_ssn": {
-      "pattern": "(?<![0-9-])(?!000|666|9\\d{2})\\d{3}-(?!00)\\d{2}-(?!0000)\\d{4}(?![0-9-])",
+      "pattern": "(?<![0-9])(?:\\d{3}[- ]\\d{2}[- ]\\d{4}|\\d{3}\\.\\d{2}\\.\\d{4})(?![0-9])",
       "confidence": 0.97,
       "level": "minimal",
       "reason": "US Social Security Number"
@@ -562,10 +562,10 @@
       "reason": "Generic national ID / government ID — keyword-anchored; value must contain a digit (blocks label-to-label variable assignments)"
     },
     "uk_national_insurance": {
-      "pattern": "(?<![A-Za-z\\d])((?-i:[ABCEGHJKLMNOPRSTWXYZ][ABCEGHJKLMNPRSTWXYZ])\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?(?-i:[ABCD]))(?![A-Za-z\\d])",
-      "confidence": 0.94,
+      "pattern": "(?<![A-Za-z0-9])(?:[A-CEGHJ-PR-TW-Z]{2}\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?[A-D]|\\d{3}[\\s\\-]\\d{3}[\\s\\-]\\d{4}|\\d{5}\\s\\d{5})(?![A-Za-z0-9])",
+      "confidence": 0.88,
       "level": "minimal",
-      "reason": "UK National Insurance number (AB 12 34 56 C). Strict letter constraints on prefix and suffix via (?-i:...) prevent IGNORECASE false positives. Very low FP risk due to distinctive format."
+      "reason": "UK National Insurance / social / tax reference number"
     },
     "labeled_gps": {
       "pattern": "(?i)(?:lat(?:itude)?)[_\\s\\-]?[:=]\\s*[\"']?(-?(?:[0-8]?\\d|90)\\.\\d{4,10})[\"']?",
@@ -1046,6 +1046,18 @@
       "confidence": 0.88,
       "level": "minimal",
       "reason": "Short password after explicit keyword"
+    },
+    "id_card_number": {
+      "pattern": "(?i)(?:^|[\\s,;(<])(?:id(?:\\s+card)?|identification(?:\\s+number)?|card\\s+number|id\\s*no)[\\s:.\\-]*([A-Z0-9]{6,16})(?:[^A-Z0-9]|$)",
+      "confidence": 0.82,
+      "level": "minimal",
+      "reason": "ID card or identification number (keyword-anchored)"
+    },
+    "drivers_license": {
+      "pattern": "(?i)(?:driver'?s?\\s*licen[sc]e|driving\\s+licen[sc]e|dl\\s*no|dl\\s*#|dlnum)[\\s:.\\-#]*([A-Z0-9]{5,15})(?:[^A-Z0-9]|$)",
+      "confidence": 0.85,
+      "level": "minimal",
+      "reason": "Driver's license number (keyword-anchored)"
     }
   },
   "file_type_extra": {
