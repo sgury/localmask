@@ -96,6 +96,59 @@ if args.langs:
 
 from regex_rules_safe import RegexRulesSafe  # noqa: E402  (after env set)
 
+# For Pro mode, also load the sensitivity classifier so the LLM layer runs.
+# This mirrors what engine.py does: regex detections that pass the classifier
+# are kept; those the LLM marks NOT_SENSITIVE are dropped (improving Precision).
+_clf = None
+if args.pro:
+    try:
+        # sensitivity_classifier.py lives in the Pro repo (files11_mcp).
+        # Try several locations: same dir as this script, Pro repo sibling, or PATH.
+        _here = os.path.dirname(os.path.abspath(__file__))
+        _pro_candidates = [
+            _here,
+            os.path.join(_here, "..", "files11_mcp"),
+            os.path.join(_here, "..", "localmask-pro"),
+            os.environ.get("LOCALMASK_PRO_DIR", ""),
+        ]
+        for _p in _pro_candidates:
+            if _p and os.path.exists(os.path.join(_p, "sensitivity_classifier.py")):
+                sys.path.insert(0, os.path.abspath(_p))
+                break
+        from sensitivity_classifier import SensitivityClassifier
+        _clf = SensitivityClassifier()
+        print(f"  Pro LLM classifier loaded — "
+              f"learned: {len(_clf._feedback_rules)}, "
+              f"embeddings: {len(_clf._emb_index)}")
+    except Exception as e:
+        print(f"  WARNING: could not load classifier ({e}) — running regex-only")
+
+
+def _apply_llm_gate(detections: list, file_path: str) -> list:
+    """Run detections through the Pro LLM classifier; drop NOT_SENSITIVE ones."""
+    if not _clf or not detections:
+        return detections
+    rel = os.path.relpath(file_path, str(CREDDATA_DIR)) if CREDDATA_DIR else file_path
+    batch = [
+        {
+            "entity":    d["entity"],
+            "context":   (f"[{rel}] " + d.get("context", ""))[:200],
+            "file_type": d.get("file_type", ""),
+            "ner_label": d.get("ner_label", d.get("type", "")),
+        }
+        for d in detections
+    ]
+    try:
+        results = _clf.classify_batch(batch)
+    except Exception:
+        return detections
+    kept = []
+    for det, res in zip(detections, results):
+        if res and res.get("decision") == "NOT_SENSITIVE":
+            continue
+        kept.append(det)
+    return kept
+
 # ── Load CredData ground truth ────────────────────────────────────────────────
 # meta/*.csv columns: Id, FileID, Domain, RepoName, FilePath, LineStart, LineEnd,
 #                     GroundTruth (T/F), ValueStart, ValueEnd, CryptographyKey,
@@ -167,6 +220,8 @@ for i, fpath in enumerate(files, 1):
         continue
 
     detections = RegexRulesSafe.scan_file(fpath, content, args.sensitivity)
+    if args.pro:
+        detections = _apply_llm_gate(detections, fpath)
     detected_lines = {d["line"] for d in detections}
 
     for line_num, is_real in gt_lines.items():

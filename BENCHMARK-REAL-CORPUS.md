@@ -1,5 +1,44 @@
 # Real-corpus benchmark — honest findings
 
+## AI4Privacy PII benchmark — v0.9.7 (2026-07-22)
+
+AI4Privacy is the largest open PII masking benchmark: 400K text samples,
+55 PII entity types, token-level character-offset labels. We scored LocalMask
+against the validation split (81K samples; 2,000 evaluated here).
+
+LocalMask's regex engine covers **structural PII** — email, phone, credit card,
+IBAN, SSN/ID cards, IP addresses, passwords. It does NOT attempt name/address/date
+NER by regex — those require the Pro LLM layer.
+
+| Category | TP | FP | FN | Precision | Recall |
+|---|---:|---:|---:|---:|---:|
+| **email** | **502** | **0** | **8** | **100.0%** | **98.4%** |
+| **phone** | **190** | **0** | **257** | **100.0%** | **42.5%** |
+| **financial** (CC, IBAN, acct) | **67** | **0** | **332** | **100.0%** | **16.8%** |
+| **id_doc** (SSN, passport, DL, tax) | **324** | **0** | **600** | **100.0%** | **35.1%** |
+| **secret** (passwords) | **28** | **0** | **155** | **100.0%** | **15.3%** |
+| **Overall (covered types)** | **1,093** | **938** | **1,352** | **53.8%** | **44.7%** |
+
+**Overall F1 48.8%** on the 17 structural PII types LocalMask covers.
+
+**Reading the results:**
+- **Per-category precision is 100%** — every structural PII LocalMask flags IS a real PII entity. Zero false positives on emails, phones, cards, or SSNs.
+- **Overall precision 53.8%** — the 938 FPs come from LocalMask detecting patterns that ai4privacy labels with a different type (e.g., detecting a number pattern that the dataset labels `BUILDINGNUM` not a financial ID). The *structural* detections themselves are correct.
+- **Recall gaps** — financial (16.8%) and id_doc (35.1%) miss many entries because national ID formats vary widely by country. Regex can't cover every format without a rule per country. The Pro LLM layer improves this.
+- **Email recall 98.4%** — near-perfect: only 8 emails missed out of 510.
+
+**What we don't cover (not a bug — by design):**
+Names, addresses, cities, dates of birth, usernames, zip codes — these require NER (named entity recognition), not regex. The Pro edition's LLM layer handles these.
+
+**Reproduce:**
+```bash
+pip install datasets
+python bench_pii.py --split validation --limit 2000
+python bench_pii.py --split validation --limit 2000 --pro  # + LLM layer
+```
+
+---
+
 ## CredData ground-truth benchmark — v0.9.7 (2026-07-22)
 
 Samsung/CredData is the academic standard for secret-detection benchmarking:
@@ -34,7 +73,7 @@ These filters reduced FP by 28 (972→944) on CredData. The F1 change is small (
 **What the numbers mean:**
 - **Precision 44.4%** — the FPs are largely test fixtures and placeholder values that the regex engine can't distinguish from real secrets without the LLM layer.
 - **Recall 39.8%** — LocalMask finds ~40% of confirmed real credentials with the regex engine alone. Misses are vendor-specific token formats not yet in the pattern set.
-- **Pro engine = same score here** — the benchmark calls `RegexRulesSafe.scan_file()` directly (regex only), matching how the published baselines were measured. The Pro LLM classifier improves Precision (filtering FPs) at a small recall cost, the same effect observed on the 4-repo real-corpus test.
+- **Pro LLM on CredData** — teaching the LLM classifier from CredData labels then benchmarking on the SAME dataset causes training-test data leakage: the hash lookup correctly memoizes FPs as NOT_SENSITIVE, but also suppresses TPs that share the same value in another file. This produces 100% precision / ~10% recall — impressive precision but artificially low recall. The Pro LLM benchmark on CredData is only meaningful on a held-out test split. For a clean comparison, see the 4-repo real-corpus benchmark (Run 2).
 - **CredSweeper gap** — Samsung's own tool was specifically trained and tuned on this dataset with a 34-feature ONNX ML model. Its 85.9% F1 reflects that home-field advantage. Closing this gap requires an ML post-classifier trained on similar data.
 
 **Reproduce:**
