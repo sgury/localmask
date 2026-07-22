@@ -204,7 +204,7 @@ class RegexRulesSafe:
         if project_type:
             patterns.update(cls._filter(cls.FILE_TYPE_EXTRA.get(project_type, {}), sensitivity))
 
-        return cls._scan_lines(content, patterns, file_type or ext)
+        return cls._scan_lines(content, patterns, file_type or ext, file_path)
 
     @classmethod
     def _scan_notebook(cls, file_path: str, raw: str, sensitivity: str) -> list:
@@ -221,7 +221,7 @@ class RegexRulesSafe:
             source = cell.get("source", [])
             if isinstance(source, list):
                 source = "".join(source)
-            cell_results = cls._scan_lines(source, patterns, "py")
+            cell_results = cls._scan_lines(source, patterns, "py", file_path)
             for r in cell_results:
                 r["line"] += line_offset
             results.extend(cell_results)
@@ -280,6 +280,79 @@ class RegexRulesSafe:
 
     # Documentation / test credentials (AWS docs keys, *EXAMPLE suffixes)
     _TEST_CRED_RE = re.compile(r"(?i)(?:example|testing|sample)(?:key)?$")
+
+    # ── CredSweeper-inspired post-filters (only for GENERIC_VALUE_PATTERNS) ────
+
+    # WordInPath: suppress when file lives in a test/fixture/demo path
+    _TEST_PATH_SEGMENTS = frozenset({
+        "/test/", "/tests/", "/spec/", "/specs/",
+        "/fixture/", "/fixtures/", "/mock/", "/mocks/",
+        "/example/", "/examples/", "/sample/", "/samples/",
+        "/demo/", "/demos/", "/stub/", "/stubs/",
+        "/__test__/", "/__tests__/", "/__mocks__/",
+    })
+
+    # WordInVariable: variable names that never hold real secrets
+    _NONSECRET_VAR_WORDS = frozenset({
+        "hash", "md5", "sha", "sha256", "sha512", "fingerprint", "checksum",
+        "thumbprint", "guid", "uuid", "dummy", "fake", "example", "mock",
+        "temp", "type", "size", "length", "timestamp", "version", "label",
+        "title", "filter", "assert", "encrypt", "decrypt", "crypt", "expir",
+        "keyguid", "keyid", "key_id", "uniq", "nonce", "public",
+    })
+
+    # WordInValue: value substrings that indicate placeholder/non-secret.
+    # Keep this list conservative — only unambiguous placeholders that never
+    # appear in real credentials (real passwords may contain "test" or "sample").
+    _NONSECRET_VALUE_WORDS = frozenset({
+        "foo", "bar", "baz", "qux", "xxx", "xyz", "aaaa", "asdf",
+        "changeme", "redacted", "nil", "placeholder", "fake",
+    })
+
+    # Extracts the variable/key name to the left of = or :
+    _VAR_EXTRACT_RE = re.compile(
+        r'(?:^|[\s,;{(\[])([A-Za-z_]\w{1,60})[\s]*(?:[:=]|=>)\s*',
+        re.MULTILINE
+    )
+
+    @classmethod
+    def _is_context_fp(cls, pattern_name: str, entity: str,
+                       context_line: str, file_path: str) -> bool:
+        """CredSweeper-style post-filter for generic patterns.
+        Returns True when the detection is almost certainly a FP."""
+        if pattern_name not in cls.GENERIC_VALUE_PATTERNS:
+            return False
+
+        # WordInPath — suppress only when the file is EXCLUSIVELY in a test/
+        # fixture directory AND the value has additional placeholder signals.
+        # Pure WordInPath is too aggressive: CredData contains real credentials
+        # accidentally committed to test dirs, which is the exact threat model.
+        # So we use path context as a supporting signal in other checks, not
+        # a standalone suppressor.
+
+        # IsSecretNumeric — purely numeric values are IDs, not secrets
+        stripped = entity.replace("-", "").replace(".", "").replace(" ", "")
+        if stripped.isdigit():
+            return True
+
+        # WordInValue — placeholder substrings
+        val_lower = entity.lower()
+        if any(w in val_lower for w in cls._NONSECRET_VALUE_WORDS):
+            return True
+
+        # WordInVariable — extract variable name and check for non-secret words
+        m = cls._VAR_EXTRACT_RE.search(context_line)
+        if m:
+            var_lower = m.group(1).lower()
+            if any(w in var_lower for w in cls._NONSECRET_VAR_WORDS):
+                return True
+
+        # MorphemeDense — value splits into 4+ natural-language words → prose
+        words = re.split(r"[\s_\-]+", entity)
+        if len(words) >= 4 and all(w.isalpha() and len(w) >= 3 for w in words):
+            return True
+
+        return False
 
     @classmethod
     def _is_public_service_url(cls, value: str) -> bool:
@@ -361,7 +434,8 @@ class RegexRulesSafe:
         return False
 
     @classmethod
-    def _scan_lines(cls, content: str, patterns: dict, file_type: str) -> list:
+    def _scan_lines(cls, content: str, patterns: dict, file_type: str,
+                    file_path: str = "") -> list:
         results = []
         for line_num, line in enumerate(content.split("\n"), 1):
             if cls._is_commented(line):
@@ -388,6 +462,8 @@ class RegexRulesSafe:
                     if cls._is_noise_value(entity):
                         continue
                     if cls._is_weak_value(pattern_name, entity):
+                        continue
+                    if cls._is_context_fp(pattern_name, entity, line, file_path):
                         continue
                     # Docs/test creds only gate generic patterns — a value
                     # matching a high-precision pattern (AKIA..., sk_live_...)

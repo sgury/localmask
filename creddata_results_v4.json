@@ -1,0 +1,18 @@
+{
+  "engine": "free",
+  "langs": "none",
+  "sensitivity": "standard",
+  "files_scored": 2532,
+  "errors_missing": 0,
+  "TP": 755,
+  "FP": 944,
+  "TN": 7450,
+  "FN": 1144,
+  "precision": 0.4444,
+  "recall": 0.3976,
+  "f1": 0.4197,
+  "fpr": 0.1124612819,
+  "fnr": 0.6024,
+  "accuracy": 0.7971436899,
+  "elapsed_s": 231.6
+}
