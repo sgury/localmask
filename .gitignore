@@ -10,3 +10,10 @@ build/
 .localmask_salt
 .localmask_cache.sqlite
 feedback_data.jsonl
+
+# Pro-only source — never commit to the OSS repo
+localmask/proxy.py
+localmask/askai.py
+sensitivity_classifier.py
+server.py
+ui.html

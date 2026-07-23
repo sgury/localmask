@@ -442,10 +442,10 @@
       "reason": "Commented-out secret in code"
     },
     "password_assignment": {
-      "pattern": "(?i)\\w*(?:password|passwd|pwd)(?!\\w*(?:template|subject|message|msg|body|format|label|name|title))\\w*\\s*[:=]\\s*['\\\"](?!d-[0-9a-fA-F]{10,})([^'\\\"]{6,})['\\\"]",
+      "pattern": "(?i)\\w*(?:password|passwd|pwd)(?!\\w*(?:template|subject|message|msg|body|format|label|name|title|text|reset|change|confirm|hint|prompt))\\w*\\s*[:=]\\s*['\\\"](?!d-[0-9a-fA-F]{10,})([^\\s'\\\"]{6,})['\\\"]",
       "confidence": 0.95,
       "level": "minimal",
-      "reason": "Password assignment"
+      "reason": "Password assignment (no-space value to exclude error messages)"
     },
     "password_unquoted": {
       "pattern": "(?i)\\w*(?:password|passwd|secret_key|master_key|encryption_key)\\w*\\s*[:=]\\s*(?!os\\.|sys\\.|self\\.|Path\\(|None\\b|True\\b|False\\b)(?=[^\\s'\"#,);]*[0-9!@#$%^&*\\-+.~|])([^\\s'\\\"#,);]{6,})$",
@@ -1000,10 +1000,10 @@
       "reason": "Firebase Cloud Messaging (FCM) server key"
     },
     "k8s_hyphenated_secret": {
-      "pattern": "(?i)^\\s*[a-z0-9_-]*(?:secret|token|passwd|password|api[_-]?key|access[_-]?key|private[_-]?key|credential):\\s*['\\\"]?([^\\s'\\\"]{8,})['\\\"]?(?:\\s+#.*)?$",
+      "pattern": "(?i)^\\s*[a-z0-9_-]*(?:secret|token|passwd|password|api[_-]?key|access[_-]?key|private[_-]?key|credential):\\s*['\\\"]?(?![A-Za-z_][A-Za-z0-9_.]*[,);]?\\s*$)([^\\s'\\\"]{8,})['\\\"]?(?:\\s+#.*)?$",
       "confidence": 0.85,
       "level": "standard",
-      "reason": "Hyphenated secret key (k8s/yaml stringData)"
+      "reason": "Hyphenated secret key (k8s/yaml stringData) — rejects Go struct field references"
     },
     "imei_number": {
       "pattern": "\\b\\d{2}[\\s-]\\d{6}[\\s-]\\d{6}[\\s-]\\d\\b",
@@ -1042,9 +1042,9 @@
       "reason": "Bank account number (keyword-anchored)"
     },
     "password_short": {
-      "pattern": "(?i)(?:password|passcode|passwd|credentials?|pin)\\s*(?:[=:]\\s*|[:\\-]\\s*|:\\s*)([^\\s\\\"'`]{4,7})(?:\\s|[\\\"'`<\\]\\),]|$)",
+      "pattern": "(?i)(?:password|passcode|passwd|credentials?|pin)\\s*(?:[=:]\\s*|[:\\-]\\s*|:\\s*)(?!(?:string|integer|boolean|varchar|number|float|double|void|null|none|undefined|object|array|list|dict|map|byte|char|uint|int|long|short|jdbc|async|creds|http|sha|md5|aes|rsa|base64|invalid|error|test|type|value)\\b)(?!0x)([^\\s\\\"'`(<\\[]{4,7})(?:\\s|[\\\"'`<\\]\\),;]|$)",
       "confidence": 0.88,
-      "level": "minimal",
+      "level": "standard",
       "reason": "Short password after explicit keyword"
     },
     "id_card_number": {
@@ -1058,6 +1058,48 @@
       "confidence": 0.85,
       "level": "minimal",
       "reason": "Driver's license number (keyword-anchored)"
+    },
+    "basic_auth_header": {
+      "pattern": "(?i)(?:(?:Authorization|auth(?:orization)?)\\s*[:=,\\s]+['\\\"]?Basic|['\\\"]Basic)\\s+([A-Za-z0-9+/]{10,}={0,2})['\\\"]?",
+      "confidence": 0.95,
+      "level": "minimal",
+      "reason": "HTTP Basic Authorization header (base64-encoded credentials)"
+    },
+    "totp_secret": {
+      "pattern": "(?i)(?:totp[_\\-\\s]*secret|otp[_\\-\\s]*secret|2fa[_\\-\\s]*secret|mfa[_\\-\\s]*secret|authenticator[_\\-\\s]*secret|secret)\\s*[:=,\\s]+['\\\"]([A-Z2-7]{16,})['\\\"]",
+      "confidence": 0.93,
+      "level": "minimal",
+      "reason": "TOTP/2FA secret (base32-encoded)"
+    },
+    "uuid_access_token": {
+      "pattern": "(?i)(?:access[_\\-]?token|auth[_\\-]?token|hec[_\\-]?token|identity[_\\-]?token|session[_\\-]?token|SetAuthToken\\()\\s*[:=(\\\"',\\s]+([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+      "confidence": 0.9,
+      "level": "minimal",
+      "reason": "UUID-format access/auth token"
+    },
+    "keyauth_token": {
+      "pattern": "(?i)(?:key[_\\-]?auth|auth[_\\-]?key|keyAuth|consumer[_\\-]?key|oauth[_\\-]?(?:consumer|token|nonce)[_\\-]?key?)\\s*[:=,\\s]*['\\\"]?([A-Za-z0-9+/=\\-_%]{8,})['\\\"]?",
+      "confidence": 0.88,
+      "level": "standard",
+      "reason": "Authentication key/keyAuth token"
+    },
+    "generic_env_api_key": {
+      "pattern": "(?m)(?i)^[^\\S\\n]*(?:export\\s+)?[A-Z0-9_]*(?:API[_-]?(?:KEY|TOKEN|PASSWORD))[A-Z0-9_]*\\s*[:=]\\s*[\\\"']?([A-Za-z0-9+/=\\-_x]{6,})[\\\"']?",
+      "confidence": 0.88,
+      "level": "standard",
+      "reason": "Generic *_API_KEY / *_API_TOKEN env var (Cloudflare, Hetzner, Dynu, OVH, etc.)"
+    },
+    "access_secret_key": {
+      "pattern": "(?i)(?:access[_-]?key|secret[_-]?key|application[_-]?key|app[_-]?key|signing[_-]?key|encryption[_-]?key|TextEncryptionKey)\\s*[\\\"'=>:\\s]+([A-Za-z0-9+/=_\\-]{16,})",
+      "confidence": 0.88,
+      "level": "standard",
+      "reason": "access_key / secret_key / application_key assignment"
+    },
+    "sql_ddl_password": {
+      "pattern": "(?i)(?:IDENTIFIED\\s+BY|SET\\s+PASSWORD(?:\\s+FOR\\s+\\S+)?\\s*=\\s*(?:PASSWORD\\s*\\()?|CREATE\\s+USER\\s+\\S+\\s+IDENTIFIED\\s+BY)\\s*['\\\"]([^'\\\"]{4,})['\\\"]",
+      "confidence": 0.95,
+      "level": "minimal",
+      "reason": "SQL DDL password (IDENTIFIED BY, SET PASSWORD, CREATE USER)"
     }
   },
   "file_type_extra": {

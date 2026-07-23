@@ -1,5 +1,5 @@
 """
-LocalMask Pro — Core Engine (shared between FastAPI server & MCP server).
+LocalMask — Core Engine (shared between the MCP server & CLI).
 
 This module wraps the existing server.py functions/globals into a clean
 LocalMaskEngine class so both the HTTP API and the MCP server can use

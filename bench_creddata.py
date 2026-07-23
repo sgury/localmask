@@ -71,6 +71,8 @@ parser.add_argument("--creddata-dir", default=os.environ.get("CREDDATA_DIR", "/t
 parser.add_argument("--sensitivity", default="standard",
                     choices=["minimal", "standard", "strict"],
                     help="LocalMask sensitivity level")
+parser.add_argument("--comment-scanner", action="store_true",
+                    help="Also run CommentScanner (Pro only) to find credentials in comments")
 args = parser.parse_args()
 
 CREDDATA_DIR = Path(args.creddata_dir)
@@ -122,6 +124,22 @@ if args.pro:
               f"embeddings: {len(_clf._emb_index)}")
     except Exception as e:
         print(f"  WARNING: could not load classifier ({e}) — running regex-only")
+
+# ── CommentScanner (Pro + --comment-scanner) ──────────────────────────────────
+_cs = None
+if args.pro and args.comment_scanner:
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+        for _p in [_here, os.path.join(_here, "..", "files11_mcp"),
+                   os.environ.get("LOCALMASK_PRO_DIR", "")]:
+            if _p and os.path.exists(os.path.join(_p, "comment_scanner.py")):
+                sys.path.insert(0, os.path.abspath(_p))
+                break
+        from comment_scanner import CommentScanner
+        _cs = CommentScanner()
+        print("  CommentScanner loaded — will scan comment blocks for missed credentials")
+    except Exception as e:
+        print(f"  WARNING: CommentScanner not available ({e})")
 
 
 def _apply_llm_gate(detections: list, file_path: str) -> list:
@@ -222,6 +240,12 @@ for i, fpath in enumerate(files, 1):
     detections = RegexRulesSafe.scan_file(fpath, content, args.sensitivity)
     if args.pro:
         detections = _apply_llm_gate(detections, fpath)
+    if _cs:
+        existing = {d["entity"] for d in detections}
+        for hit in _cs.scan_file(content, fpath):
+            if hit["entity"] not in existing:
+                detections.append(hit)
+                existing.add(hit["entity"])
     detected_lines = {d["line"] for d in detections}
 
     for line_num, is_real in gt_lines.items():
@@ -251,7 +275,8 @@ accuracy  = (TP + TN) / (TP + FP + TN + FN) if (TP + FP + TN + FN) else 0.0
 # ── Results ───────────────────────────────────────────────────────────────────
 
 results = {
-    "engine": "pro" if args.pro else "free",
+    "engine": ("pro+comments" if (args.pro and args.comment_scanner) else
+               "pro" if args.pro else "free"),
     "langs": args.langs or "none",
     "sensitivity": args.sensitivity,
     "files_scored": len(files),

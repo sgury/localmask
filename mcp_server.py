@@ -306,7 +306,7 @@ REVIEW_DIR = os.path.expanduser("~/.localmask/reviews")
 
 def _export_scan_for_review(scan_id: str) -> str | None:
     """Write scan detections to a JSON file so the CLI can read them for review."""
-    from server import SCANS
+    from localmask.state import SCANS
     scan = SCANS.get(scan_id)
     if not scan:
         return None
@@ -346,7 +346,7 @@ def _import_review_decisions(scan_id: str) -> bool:
     if not os.path.exists(review_file):
         return False
 
-    from server import SCANS
+    from localmask.state import SCANS
     scan = SCANS.get(scan_id)
     if not scan:
         return False

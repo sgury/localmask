@@ -17,7 +17,7 @@ import os
 # Overwritten at build time by build-dist.sh. In the dev tree the env var
 # wins for testing; DIST BUILDS GET A LITERAL "free" WITH NO ENV OVERRIDE —
 # paid capabilities unlock only through an activated (signed) license.
-EDITION = os.environ.get("LOCALMASK_EDITION", "pro")
+EDITION = os.environ.get("LOCALMASK_EDITION", "free")
 
 # Baked at build time. RELEASE_DATE (YYYYMMDD) anchors the perpetual-license
 # update window: an LM2 license covers this build iff RELEASE_DATE falls
