@@ -1,0 +1,14 @@
+# Copy this to .github/workflows/localmask.yml in your repo.
+# It fails a pull request if any secret or PII is committed.
+name: LocalMask
+on: [pull_request, push]
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sgury/localmask@v0.9.3
+        with:
+          sensitivity: standard   # minimal | standard | strict
+          langs: all              # or e.g. "he,ro"

@@ -1,0 +1,47 @@
+name: "LocalMask secret scan"
+description: "Block secrets & PII in a pull request. 100% local — nothing leaves the runner."
+branding:
+  icon: "eye-off"
+  color: "blue"
+inputs:
+  path:
+    description: "Directory to scan"
+    required: false
+    default: "."
+  sensitivity:
+    description: "minimal | standard | strict"
+    required: false
+    default: "standard"
+  langs:
+    description: "Detection language packs (e.g. 'he,ro' or 'all')"
+    required: false
+    default: "all"
+  version:
+    description: "localmask version to install from PyPI (default: latest)"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install LocalMask
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          pip install "localmask==${{ inputs.version }}"
+        else
+          pip install localmask
+        fi
+    - name: Scan for secrets
+      shell: bash
+      env:
+        LOCALMASK_LANGS: ${{ inputs.langs }}
+        # Regex/entropy engine only — no Ollama on CI, fully deterministic.
+        LOCALMASK_LLM_BUDGET_SEC: "0"
+      run: |
+        localmask scan "${{ inputs.path }}" \
+          --sensitivity "${{ inputs.sensitivity }}" \
+          --fail-on-detection

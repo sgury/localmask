@@ -1,0 +1,7 @@
+- id: localmask
+  name: LocalMask — block secrets & PII
+  description: Scan staged files for credentials and PII before they get committed. 100% local.
+  entry: localmask scan . --fail-on-detection
+  language: python
+  pass_filenames: false
+  always_run: true

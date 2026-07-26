@@ -1,0 +1,45 @@
+# LocalMask AI Proxy config — copy to ~/.localmask/proxy.yaml
+# Everything runs locally. The only outbound call is to the AI provider you
+# configure below, and it carries masked ~[TOKEN]~ placeholders only.
+
+listen_host: 127.0.0.1
+listen_port: 8100
+
+# Put real values back into the AI's answer before returning it to your tool.
+# (Your tool already had the secrets; the point is the PROVIDER never sees them.)
+rehydrate: true
+
+mask:
+  sensitivity: standard      # minimal | standard | strict
+  use_model: false           # false = fast regex+entropy; true = local Ollama model (higher recall, slower)
+
+# Key policy — three common setups:
+#
+#  1. Blank (recommended for teams) — leave api_key empty and pass the key via
+#     env var instead: export LOCALMASK_ANTHROPIC_KEY=sk-ant-...
+#     The key lives only in memory; proxy.yaml stays secret-free.
+#
+#  2. Internal LLM gateway — set base_url to your company gateway and leave
+#     api_key blank. The gateway handles auth (mTLS, internal token, etc.).
+#     Developers hold no AI key at all.
+#       base_url: https://llm-gateway.company.internal
+#
+#  3. Secrets manager — inject at startup:
+#       export LOCALMASK_ANTHROPIC_KEY=$(aws secretsmanager get-secret-value ...)
+#
+# If api_key is set here, the proxy uses it for every request.
+# If blank, the proxy relays whatever key your tool sends (BYOK passthrough).
+upstreams:
+  openai:
+    base_url: https://api.openai.com
+    api_key: ""
+  anthropic:
+    base_url: https://api.anthropic.com
+    api_key: ""
+
+# Empty = allow any model. Restrict to a whitelist for locked-down teams.
+model_allowlist: []
+
+# Compliance audit trail — logs types + counts of what was masked, never values.
+audit_log: ~/.localmask/proxy-audit.jsonl
+timeout: 120

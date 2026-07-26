@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.DS_Store
+venv/
+.venv/
+dist/
+build/
+*.egg-info/
+~/.localmask/
+.localmask_salt
+.localmask_cache.sqlite
+feedback_data.jsonl
+
+# Pro-only source — never commit to the OSS repo
+localmask/proxy.py
+localmask/askai.py
+sensitivity_classifier.py
+comment_scanner.py
+server.py
+ui.html
