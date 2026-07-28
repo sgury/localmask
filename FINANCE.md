@@ -27,7 +27,7 @@ ports, versions, IDs — are never masked.
 |---|---|---|---|---|
 | `token` | **Free / OSS** | `~[AMOUNT_0]~` | nothing numeric | nothing |
 | `bucket` | Pro | `~[AMOUNT_5D_USD_0]~` | reason about magnitude | order of magnitude + currency |
-| `relative` | Pro | `(0.42*R_SALARY)` | compare, sum, compute ratios | relative sizes **within** a category |
+| `relative` | Pro | `(0.42*R_AMOUNT)` | compare, sum, compute ratios | relative sizes between amounts |
 
 The simplest, safest mode — `token` (full opacity) — is free and open-source.
 The smarter modes that reveal something useful to the AI (`bucket` magnitude,
@@ -37,14 +37,13 @@ different protection level than the one you chose.
 
 ## How `relative` works — honestly
 
-- Each repository gets a **crypto-random base R per category** (salary /
-  revenue / price / amount). Every amount is sent as its ratio to R.
+- Each repository gets **one crypto-random secret base R**. Every amount is
+  sent as its ratio to R — the surrounding text (salary / price) already
+  tells the AI what kind of amount it is.
 - R is generated locally with a CSPRNG and stored in
   `~/.localmask/money_keys.json` with `0600` permissions. **You don't pick
   it and you don't memorize it** — a human-chosen number is guessable; this
   one isn't.
-- Separate categories get separate bases, so cross-category ratios (payroll
-  as a share of revenue) are hidden too.
 
 **What this is:** key-based relative pseudonymization. Absolute values, the
 currency and the scale are hidden — leaking one document elsewhere does not

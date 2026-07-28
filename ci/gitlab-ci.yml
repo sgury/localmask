@@ -1,0 +1,33 @@
+# ═══════════════════════════════════════════════════════════════
+# LocalMask Pro — GitLab CI/CD
+#
+# Add this to your source repo as .gitlab-ci.yml (or include it)
+#
+# Required CI/CD variables (Settings → CI/CD → Variables):
+#   LOCALMASK_SERVER  — Your org server URL
+#   LOCALMASK_KEY     — Pro/Enterprise license key
+#   MASKED_REPO_URL   — Target repo for masked code
+#   GIT_TOKEN         — PAT with push access
+# ═══════════════════════════════════════════════════════════════
+
+stages:
+  - mask
+
+localmask-sync:
+  stage: mask
+  image: python:3.12-slim
+  only:
+    - main
+    - master
+    - develop
+  variables:
+    SOURCE_REPO: ${CI_REPOSITORY_URL}
+    MASKED_REPO: ${MASKED_REPO_URL}
+    SENSITIVITY: standard
+    AUTO_APPROVE: "true"
+    ORG: ${CI_PROJECT_NAMESPACE}
+  script:
+    - python3 ci/localmask-sync.py
+  artifacts:
+    reports:
+      dotenv: localmask.env

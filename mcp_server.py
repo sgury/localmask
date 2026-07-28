@@ -46,7 +46,11 @@ mcp = FastMCP(
         "to run with real values, call unmask_text(text) — restoration happens "
         "locally.\n"
         "4. scan_repo/get_detections give a whole-repo security overview; the "
-        "per-file read_file_masked is the simplest primitive for everyday chat.\n\n"
+        "per-file read_file_masked is the simplest primitive for everyday chat.\n"
+        "5. PRESENTATION: when a tool result contains a `view` field, it is the "
+        "product's pre-rendered review board — show that markdown to the user "
+        "VERBATIM (then add your commentary after it). Never replace it with "
+        "your own summary of the raw JSON.\n\n"
         "You can reassure the user plainly: their secrets never leave their "
         "machine — you are only ever shown masked placeholders."
     ),
@@ -102,7 +106,7 @@ def _safe(fn, *args, **kwargs) -> dict:
 @mcp.tool()
 def scan_repo(
     source: str,
-    sensitivity: str = "standard",
+    sensitivity: str = "strict",
     org: str = "default",
 ) -> str:
     """Scan a repository for secrets, credentials, and sensitive data.
@@ -110,7 +114,9 @@ def scan_repo(
     Args:
         source: Git URL (https://github.com/org/repo) or local path
         sensitivity: Detection depth — "minimal" (keys/passwords only),
-                     "standard" (+ PII, infra), or "strict" (+ org identity, trace IDs)
+                     "standard" (+ PII, infra), or "strict" (+ org identity, trace IDs).
+                     Defaults to "strict": this path feeds code to an AI, where a
+                     missed value is a leak and a false positive costs nothing.
         org: Organization ID for grouping scans
 
     Returns scan_id and detection summary. Use get_detections() to see details.
@@ -132,18 +138,102 @@ def scan_repo(
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
-def get_detections(scan_id: str, show_samples: bool = True) -> str:
+def _render_review_view(scan_id: str, detections: list, status: str = "") -> str:
+    """CLI-style review board, pre-rendered as markdown. Deterministic — the
+    product owns the presentation, not the model. (Internal helper — NOT an
+    MCP tool.)"""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for d in detections:
+        groups[d.get("type", "unknown")].append(d)
+
+    pending = sum(1 for d in detections if d.get("decision") in (None, "pending"))
+    approved = sum(1 for d in detections if d.get("decision") == "approved")
+    rejected = sum(1 for d in detections if d.get("decision") == "rejected")
+    files = len({d.get("file", "?") for d in detections})
+
+    lines = [
+        f"## 🔒 LocalMask Review — `{scan_id}`",
+        f"**{len(detections)} findings** in {files} files · "
+        f"⏳ {pending} pending · ✅ {approved} approved · ❌ {rejected} rejected"
+        + (f" · status: **{status}**" if status else ""),
+        "",
+        "_I only see masked `~[TOKEN]~` placeholders — the real values never "
+        "reach the AI._",
+        "",
+    ]
+    # NOT a markdown table: the chat panel's linkifier turns plain
+    # `path/to/file:line` into clickable jumps ONLY in free text / list
+    # items — table cells (and markdown-link/backtick wrapping) break it.
+    for dtype, dets in sorted(groups.items(), key=lambda x: -len(x[1])):
+        avg = sum(d.get("confidence", 0) for d in dets) / len(dets)
+        p = sum(1 for d in dets if d.get("decision") in (None, "pending"))
+        a = sum(1 for d in dets if d.get("decision") == "approved")
+        r = sum(1 for d in dets if d.get("decision") == "rejected")
+        st = "✅ approved" if p == 0 and r == 0 else ("❌ rejected" if p == 0 and a == 0
+             else f"⏳{p}" + (f" ✅{a}" if a else "") + (f" ❌{r}" if r else ""))
+        ex = dets[0]
+        # Bare relative path — the chat panel linkifies it. A ":line" suffix
+        # breaks the linkifier, so the line number rides along as text.
+        ex_ref = f"{ex.get('file', '?')} (line {ex.get('line', 0)})"
+        lines.append(
+            f"- **{dtype}** ×{len(dets)} · {avg:.0%} · {st} — "
+            f"{ex_ref} `{ex.get('token', '')}` ({ex.get('det_id', '')})")
+
+    lines += [
+        "",
+        "**Review — just say it:**",
+        '· *"approve all"* — accept every masking decision',
+        '· *"reject det_012 — test fixture"* — false positive, unmask it (the model learns)',
+        '· *"show me the <type> ones"* — inspect a group before deciding',
+        '· *scan missed something?* — run `localmask teach` in your **terminal** '
+        '(local). Never paste a secret value into this chat.',
+        '· *"open the review UI"* — full visual review, side by side',
+    ]
+    return "\n".join(lines)
+
+
+def _latest_scan_for_repo(path: str = "") -> str:
+    """Most recent scan_id whose repo is `path` (default: cwd — the MCP
+    server runs at the workspace root). Lets viewing tools work without the
+    model having to know or re-create a scan."""
+    from localmask.state import SCANS, _load_persisted_scans
+    _load_persisted_scans()
+    want = path or os.getcwd()
+    best, best_t = "", ""
+    for sid, sc in SCANS.items():
+        repo = sc.get("repo_url", "")
+        try:
+            if repo and os.path.isdir(repo) and os.path.samefile(repo, want):
+                if sc.get("created_at", "") > best_t:
+                    best, best_t = sid, sc.get("created_at", "")
+        except OSError:
+            continue
+    return best
+
+
+def get_detections(scan_id: str = "", show_samples: bool = True) -> str:
     """Get detection summary and samples for a scan.
 
     Returns a summary grouped by type (with counts), plus sample detections
     showing file, line, masked token, and surrounding code context.
     Real secret values are NEVER exposed — only masked tokens like ~[PASSWORD_0]~.
 
+    The `view` field is a pre-rendered markdown review board — ALWAYS show it
+    to the user verbatim (it is the product's review UI); add your own
+    commentary after it, not instead of it.
+
     Args:
-        scan_id: Scan ID from scan_repo()
+        scan_id: Scan ID from scan_repo(). OPTIONAL — if omitted, the latest
+            scan of the current repo is used automatically. Do NOT run a new
+            scan just to view detections.
         show_samples: If true, include 2-3 sample detections per type with code context
     """
+    if not scan_id:
+        scan_id = _latest_scan_for_repo()
+        if not scan_id:
+            return json.dumps({"error": "No scan found for this repo yet — "
+                               "run scan_repo() once first."})
     result = _safe(engine.get_detections, scan_id)
     if "error" in result:
         return json.dumps(result, indent=2)
@@ -193,6 +283,7 @@ def get_detections(scan_id: str, show_samples: bool = True) -> str:
         "total_detections": len(detections),
         "types_found": len(type_counts),
         "files_affected": len(file_counts),
+        "view": _render_review_view(scan_id, detections, result.get("status", "")),
         "by_type": type_summary,
         "top_files": file_summary,
         "samples": samples,
@@ -222,26 +313,57 @@ def review_detection(
 
 @mcp.tool()
 def bulk_review(
-    scan_id: str,
-    decisions: str,
+    scan_id: str = "",
+    decisions: str = "",
+    file: str = "",
+    decision: str = "",
 ) -> str:
     """Approve or reject multiple detections at once.
 
+    Two forms:
+      1. Per-detection: pass `decisions` — JSON mapping det_id to decision.
+         Example: '{"det_001": "approved", "det_002": "rejected"}'
+      2. Per-FILE: pass `file` (repo-relative path) + `decision`
+         ("approved"/"rejected") to apply one decision to every detection in
+         that file — e.g. reject everything in docs/runbook.md.
+
     Args:
-        scan_id: Scan ID
-        decisions: JSON string mapping det_id to decision.
-                   Example: '{"det_001": "approved", "det_002": "rejected"}'
+        scan_id: Scan ID. OPTIONAL — defaults to the repo's latest scan.
+        decisions: JSON string mapping det_id to decision (form 1).
+        file: repo-relative file path (form 2).
+        decision: "approved" or "rejected" (form 2).
     """
-    try:
-        dec_dict = json.loads(decisions)
-    except json.JSONDecodeError:
-        return json.dumps({"error": "decisions must be valid JSON"})
+    if not scan_id:
+        scan_id = _latest_scan_for_repo()
+        if not scan_id:
+            return json.dumps({"error": "No scan found for this repo yet."})
+    if file:
+        if decision not in ("approved", "rejected"):
+            return json.dumps({"error": "decision must be 'approved' or 'rejected'"})
+        res = _safe(engine.get_detections, scan_id)
+        if "error" in res:
+            return json.dumps(res, indent=2)
+        norm = file.replace("\\", "/").lstrip("./")
+        dec_dict = {d["det_id"]: decision
+                    for d in res.get("detections", [])
+                    if d.get("file", "").replace("\\", "/") == norm
+                    or norm in (d.get("files") or [])}
+        if not dec_dict:
+            return json.dumps({"error": f"No detections found in '{file}'."})
+    else:
+        try:
+            dec_dict = json.loads(decisions)
+        except json.JSONDecodeError:
+            return json.dumps({"error": "decisions must be valid JSON"})
     result = _safe(engine.review_detections, scan_id, dec_dict)
+    if isinstance(result, dict) and file:
+        result["file"] = file
+        result["applied"] = len(dec_dict)
     return json.dumps(result, indent=2)
 
 
 @mcp.tool()
-def get_review_queue(scan_id: str) -> str:
+def get_review_queue(scan_id: str = "") -> str:
     """Get review progress — detection types with counts, confidence, and review status.
 
     Shows a summary like the CLI's interactive reviewer: each detection type,
@@ -249,8 +371,15 @@ def get_review_queue(scan_id: str) -> str:
     Use this to understand what needs review before diving into individual detections.
 
     Args:
-        scan_id: Scan ID from scan_repo()
+        scan_id: Scan ID from scan_repo(). OPTIONAL — if omitted, the latest
+            scan of the current repo is used automatically. Do NOT run a new
+            scan just to view the queue.
     """
+    if not scan_id:
+        scan_id = _latest_scan_for_repo()
+        if not scan_id:
+            return json.dumps({"error": "No scan found for this repo yet — "
+                               "run scan_repo() once first."})
     result = _safe(engine.get_detections, scan_id)
     if "error" in result:
         return json.dumps(result, indent=2)
@@ -295,8 +424,10 @@ def get_review_queue(scan_id: str) -> str:
         "total_pending": total_pending,
         "total_approved": total_approved,
         "total_rejected": total_rejected,
+        "view": _render_review_view(scan_id, detections,
+                                    result.get("status", "")),
         "types": types,
-        "hint": "Use open_review_ui(scan_id) to launch the interactive terminal reviewer. The developer reviews locally — no tokens, no secrets sent to the cloud.",
+        "hint": "Show the `view` field to the user VERBATIM — it is the product's review board. Use open_review_ui(scan_id) for the full visual reviewer. Everything stays local.",
     }
     return json.dumps(output, indent=2)
 
@@ -484,6 +615,18 @@ def get_file_masked(scan_id: str, path: str) -> str:
         path: Relative file path within the repo (e.g. "src/config.py")
     """
     result = _safe(engine.get_file_masked, scan_id, path)
+    # BOUNDARY SANITIZATION: engine detection records carry the real "value"
+    # (needed locally for masking/review). NOTHING that crosses this MCP
+    # boundary may include it — the model only ever sees masked tokens.
+    if isinstance(result.get("detections"), list):
+        result["detections"] = [{
+            "det_id": d.get("det_id"),
+            "type": d.get("type"),
+            "line": d.get("line"),
+            "token": d.get("token"),
+            "confidence": d.get("confidence"),
+            "decision": d.get("decision", "pending"),
+        } for d in result["detections"]]
     return json.dumps(result, indent=2)
 
 
@@ -661,24 +804,11 @@ def publish_masked_repo(
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
-def teach_value(
-    scan_id: str,
-    value: str,
-    action: str = "mask",
-    subtype: str = "SECRET",
-) -> str:
-    """Train the detection model by teaching it about a specific value.
-
-    Args:
-        scan_id: Scan ID
-        value: The actual string value to teach about
-        action: "mask" (this is sensitive, always mask it) or
-                "allow" (this is a false positive, don't mask)
-        subtype: Type label (e.g. "PASSWORD", "API_KEY", "PERSON_NAME")
-    """
-    result = _safe(engine.teach_value, scan_id, value, action=action, subtype=subtype)
-    return json.dumps(result, indent=2)
+# NOTE: there is deliberately NO teach tool over MCP. Teaching requires the
+# REAL secret value, and anything typed into the AI chat reaches the model —
+# the one thing LocalMask exists to prevent. Teaching is local-only:
+# `localmask teach` in the terminal, or the review UI. False positives don't
+# need the value at all — reject by det_id via review_detection.
 
 
 @_cap_tool("ask_ai")   # Pro+ capability — not advertised to Free clients

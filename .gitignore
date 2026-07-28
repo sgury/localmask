@@ -1,20 +1,37 @@
+model_finetuned/model.safetensors
+
+# Environments / caches
+venv/
 __pycache__/
 *.pyc
 .DS_Store
-venv/
-.venv/
 dist/
-build/
-*.egg-info/
-~/.localmask/
-.localmask_salt
-.localmask_cache.sqlite
-feedback_data.jsonl
+mnt/
 
-# Pro-only source — never commit to the OSS repo
-localmask/proxy.py
-localmask/askai.py
-sensitivity_classifier.py
-comment_scanner.py
-server.py
-ui.html
+# Media & demo outputs (kept outside the repo — see media/ sibling dir)
+*.mp4
+*.gif
+*.cast
+ad_segments/
+demo-full-flow/
+localmask-ask-publish-demo/
+localmask-dashboard-demo/
+localmask-enterprise-video/
+localmask-mcp-demo/
+localmask-mcp-video/
+producthunt/
+
+# Learning data — contains reviewer feedback derived from scanned repos.
+# Never commit: entities may reference real tokens. Local-only.
+feedback_data.jsonl
+feedback_data.jsonl.bak
+.localmask_cache.sqlite
+.localmask_salt
+embeddings_cache.npz
+model_finetuned/
+dist/build/
+*.whl
+.dev/
+vault.sqlite
+.vault_key
+.secrets/

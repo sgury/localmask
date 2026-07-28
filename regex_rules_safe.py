@@ -159,6 +159,7 @@ class RegexRulesSafe:
         "dockerfile": "dockerfile",
         "ini": "ini", "cfg": "ini", "conf": "ini",
         "md": "freetext", "txt": "freetext", "rst": "freetext", "adoc": "freetext",
+        "csv": "freetext", "tsv": "freetext",
         "key": "freetext", "pem": "freetext", "crt": "freetext", "cer": "freetext",
     }
 
@@ -211,7 +212,7 @@ class RegexRulesSafe:
         try:
             nb = json.loads(raw)
         except Exception:
-            return cls._scan_lines(raw, cls._filter(cls.UNIVERSAL, sensitivity), "ipynb")
+            return cls._scan_lines(raw, cls._filter(cls.UNIVERSAL, sensitivity), "ipynb", file_path)
 
         results = []
         line_offset = 0

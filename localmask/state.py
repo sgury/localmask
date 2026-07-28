@@ -43,6 +43,109 @@ def _get_or_load_scan(scan_id: str) -> dict | None:
     return None
 
 
+# ── Masked-content store ─────────────────────────────────────────────────
+# The scan already builds the masked version of every file; persist it so
+# later views (VS Code key-toggle, `mask-text`) are served instantly from
+# disk instead of cold-starting the engine and re-scanning. The store is
+# refreshed on scan and on sync (the post-commit hook) — the two moments
+# the masked view is allowed to change.
+
+_MASKED_DIR = os.path.expanduser("~/.localmask/masked")
+
+
+def _masked_store_dir(scan_id: str) -> str:
+    return os.path.join(_MASKED_DIR, scan_id)
+
+
+def _persist_masked(scan_id: str, session: dict, src_dir: str):
+    """Write every masked file of `session` to ~/.localmask/masked/<scan_id>/,
+    with a manifest of source mtimes+sizes for staleness checks."""
+    store = _masked_store_dir(scan_id)
+    manifest = {}
+    try:
+        for rel, fdata in session.get("files", {}).items():
+            masked = fdata.get("masked")
+            if masked is None:
+                continue
+            dst = os.path.join(store, rel)
+            os.makedirs(os.path.dirname(dst) or store, exist_ok=True)
+            with open(dst, "w") as f:
+                f.write(masked)
+            try:
+                st = os.stat(os.path.join(src_dir, rel))
+                manifest[rel] = {"mtime": st.st_mtime, "size": st.st_size}
+            except OSError:
+                manifest[rel] = {"mtime": 0, "size": -1}
+        os.makedirs(store, exist_ok=True)
+        with open(os.path.join(store, ".manifest.json"), "w") as f:
+            json.dump(manifest, f)
+    except Exception:
+        # The store is a cache — never let it break a scan.
+        pass
+
+
+def _rel_in_repo(repo_root: str, file_path: str) -> str | None:
+    """file's path relative to repo_root, robust to case-only differences —
+    macOS filesystems are case-insensitive but realpath() keeps the case it
+    was given, so a scan recorded under ~/Dev must still match ~/dev."""
+    root = os.path.realpath(repo_root).rstrip(os.sep)
+    fp = os.path.realpath(file_path)
+    rel = os.path.relpath(fp, root)
+    if not rel.startswith(".."):
+        return rel
+    if fp.lower().startswith(root.lower() + os.sep):
+        return fp[len(root) + 1:]
+    return None
+
+
+def _masked_from_store(scan_id: str, repo_root: str, file_path: str) -> str | None:
+    """Return the stored masked content for `file_path`, or None when the
+    store misses or the working file changed since the last scan/sync."""
+    try:
+        rel = _rel_in_repo(repo_root, file_path)
+        if rel is None:
+            return None
+        store = _masked_store_dir(scan_id)
+        with open(os.path.join(store, ".manifest.json")) as f:
+            entry = json.load(f).get(rel)
+        if not entry:
+            return None
+        st = os.stat(file_path)
+        if st.st_mtime != entry["mtime"] or st.st_size != entry["size"]:
+            return None   # file edited since last scan/sync → caller re-masks
+        with open(os.path.join(store, rel)) as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+def _update_masked_store(scan_id: str, repo_root: str, file_path: str,
+                         masked: str):
+    """Refresh a single file in the store after an on-demand re-mask, so the
+    next view of a dirty file is instant too."""
+    try:
+        rel = _rel_in_repo(repo_root, file_path)
+        if rel is None:
+            return
+        store = _masked_store_dir(scan_id)
+        dst = os.path.join(store, rel)
+        os.makedirs(os.path.dirname(dst) or store, exist_ok=True)
+        with open(dst, "w") as f:
+            f.write(masked)
+        mpath = os.path.join(store, ".manifest.json")
+        try:
+            with open(mpath) as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = {}
+        st = os.stat(file_path)
+        manifest[rel] = {"mtime": st.st_mtime, "size": st.st_size}
+        with open(mpath, "w") as f:
+            json.dump(manifest, f)
+    except Exception:
+        pass
+
+
 def _persist_scan(scan_id: str):
     """Write a scan record to disk."""
     scan = SCANS.get(scan_id)
@@ -249,6 +352,10 @@ def _scan_stats(detections: list, session: dict) -> dict:
         "total_files": len(session["files"]),
         "total_detections": len(detections),
         "by_type": by_type,
+        # Persisted so later per-process commands (sync, mask-text) re-scan
+        # at the SAME sensitivity the user chose — not the default.
+        "sensitivity": session.get("sensitivity", "standard"),
+        "excluded_files": session.get("ignored_count", 0),
     }
 
 
@@ -273,3 +380,42 @@ def _scan_to_dict(scan: dict, include_detections: bool = False) -> dict:
     return out
 
 
+
+
+def _apply_decisions_to_store(scan_id: str, dets: list):
+    """Patch the masked-content store after review decisions so the 🔑 masked
+    view matches what will actually be published: rejected values become
+    readable again, (re-)approved values are masked. `dets` = detection dicts
+    with token/value/decision/file(s)."""
+    store = _masked_store_dir(scan_id)
+    if not os.path.isdir(store):
+        return
+    # Group replacements per file
+    per_file = {}
+    for d in dets:
+        tok, val = d.get("token"), d.get("value")
+        if not tok or not val:
+            continue
+        files = d.get("files") or ([d["file"]] if d.get("file") else [])
+        for rel in files:
+            per_file.setdefault(rel, []).append(
+                (tok, val, d.get("decision") == "rejected"))
+    for rel, repls in per_file.items():
+        path = os.path.join(store, rel)
+        try:
+            with open(path) as f:
+                content = f.read()
+        except OSError:
+            continue
+        orig = content
+        for tok, val, rejected in repls:
+            if rejected:
+                content = content.replace(tok, val)   # readable again
+            else:
+                content = content.replace(val, tok)   # (re-)masked
+        if content != orig:
+            try:
+                with open(path, "w") as f:
+                    f.write(content)
+            except OSError:
+                pass

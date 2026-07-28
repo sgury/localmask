@@ -1,4 +1,24 @@
-# LocalMask Free — 100% local, regex engine. No ML/cloud deps.
+# Core server + pipeline
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+pydantic>=2.4.0
 pyyaml>=6.0.1
 gitpython>=3.1.40
+requests>=2.31.0
+
+# MCP server
 mcp>=1.28.0
+
+# Ask-AI providers (optional at runtime)
+anthropic>=0.25.0
+openai>=1.12.0
+
+# Optional: better NER (falls back to regex heuristics without it)
+spacy>=3.7.0
+
+# Org server / shared rules store
+redis>=5.0.0
+
+# Encrypt the persistent mask vault at rest (Fernet/AES)
+cryptography>=42.0.0

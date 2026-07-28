@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════════════════
+# LocalMask Pro — GitHub Actions CI/CD
+#
+# Add this to your source repo as .github/workflows/localmask.yml
+#
+# On every push to main:
+#   1. Scans code for secrets via your LocalMask org server
+#   2. Preserves existing token mappings across runs
+#   3. Publishes masked version to your masked repo
+#
+# Required secrets (set in GitHub → Settings → Secrets):
+#   LOCALMASK_SERVER  — Your org server URL (e.g. https://localmask.company.com:8090)
+#   LOCALMASK_KEY     — Pro/Enterprise license key
+#   MASKED_REPO_URL   — Target repo for masked code (e.g. https://github.com/org/repo-masked)
+#   GIT_TOKEN         — PAT with push access to both repos
+# ═══════════════════════════════════════════════════════════════
+
+name: LocalMask — Sync Masked Repo
+
+on:
+  push:
+    branches: [main, master, develop]
+  workflow_dispatch:  # manual trigger
+
+jobs:
+  mask-and-sync:
+    runs-on: ubuntu-latest
+    name: Scan & Publish Masked Repo
+
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download LocalMask CI agent
+        run: |
+          curl -sL ${{ secrets.LOCALMASK_SERVER }}/ci/localmask-sync.py -o localmask-sync.py \
+            || cp ci/localmask-sync.py . 2>/dev/null \
+            || echo "Using bundled CI agent"
+
+      - name: Scan & Publish Masked Repo
+        env:
+          LOCALMASK_SERVER: ${{ secrets.LOCALMASK_SERVER }}
+          LOCALMASK_KEY: ${{ secrets.LOCALMASK_KEY }}
+          SOURCE_REPO: ${{ github.server_url }}/${{ github.repository }}
+          MASKED_REPO: ${{ secrets.MASKED_REPO_URL }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+          SENSITIVITY: standard
+          AUTO_APPROVE: "true"
+          ORG: ${{ github.repository_owner }}
+        run: python3 localmask-sync.py
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### LocalMask Sync Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Source: \`${{ github.repository }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Masked: \`${{ secrets.MASKED_REPO_URL }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

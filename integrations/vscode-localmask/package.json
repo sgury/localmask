@@ -1,0 +1,68 @@
+{
+  "name": "localmask-key-toggle",
+  "displayName": "LocalMask — Key Toggle",
+  "description": "One key to flip any file between real values and the masked view (~[TOKEN]~). 100% local — powered by the LocalMask CLI.",
+  "version": "0.1.0",
+  "publisher": "localmask",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "localmask.toggle",
+        "title": "LocalMask: Toggle Masked / Real View",
+        "icon": "$(key)"
+      },
+      {
+        "command": "localmask.scan",
+        "title": "LocalMask: Scan Repository for Secrets",
+        "icon": "$(shield)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "localmask.toggle",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "localmask.toggle",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LocalMask",
+      "properties": {
+        "localmask.cliPath": {
+          "type": "string",
+          "default": "~/.localmask/localmask",
+          "description": "Path to the localmask CLI."
+        },
+        "localmask.publishTarget": {
+          "type": "string",
+          "default": "",
+          "description": "Masked mirror target (local path or git URL) used by the Publish menu action."
+        },
+        "localmask.scanId": {
+          "type": "string",
+          "default": "",
+          "description": "Scan ID whose token vault is used for masking. Leave empty to auto-detect from the repo's LocalMask git hook."
+        }
+      }
+    }
+  }
+}

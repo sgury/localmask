@@ -22,7 +22,8 @@ from localmask.state import (
     SESSIONS, SCANS, KEYS, APP_CONFIG, NOTIFICATIONS,
     _new_session, _summary, _gen_scan_id, _flatten_detections,
     _scan_stats, _scan_to_dict, _notify,
-    _persist_scan, _get_or_load_scan,
+    _persist_scan, _get_or_load_scan, _persist_masked,
+    _apply_decisions_to_store,
 )
 from localmask.vault import (
     CREDENTIALS, CRED_TTL_SECONDS,
@@ -89,14 +90,14 @@ class LocalMaskEngine:
     """
 
     def __init__(self):
-        # Force lazy-load of classifiers on first use
-        self._bert_loaded = False
+        # Force lazy-load of detection engines on first use
+        self._pro_loaded = False
         self._ner_loaded = False
 
     def _ensure_classifiers(self):
-        if not self._bert_loaded:
+        if not self._pro_loaded:
             _get_pro()
-            self._bert_loaded = True
+            self._pro_loaded = True
         if not self._ner_loaded:
             _get_ner()
             self._ner_loaded = True
@@ -169,6 +170,9 @@ class LocalMaskEngine:
         }
         SCANS[scan_id] = scan_record
         _persist_scan(scan_id)
+        # Persist masked content so later views (key-toggle, mask-text) are
+        # instant — no engine cold-start, no re-scan.
+        _persist_masked(scan_id, session, src_dir)
         _audit("scan", actor=submitted_by, scan_id=scan_id,
                repo=scan_record["repo_url"], sensitivity=sensitivity,
                files=len(session.get("files", {})), detections=len(detections))
@@ -352,6 +356,9 @@ class LocalMaskEngine:
         # export in a fresh CLI invocation) sees the synced result, not the
         # pre-sync snapshot on disk.
         _persist_scan(scan_id)
+        # Refresh the masked-content store — sync (the post-commit hook) is
+        # one of the two events allowed to change what the masked view shows.
+        _persist_masked(scan_id, new_session, src_dir)
 
         # New/undecided detections un-approve the scan: it must be re-reviewed
         # before the masked mirror is refreshed again.
@@ -491,6 +498,28 @@ class LocalMaskEngine:
 
         scan["updated_at"] = datetime.now(timezone.utc).isoformat()
         _persist_scan(scan_id)
+        # Make rejections DURABLE: re-scans are not fully deterministic (LLM
+        # gate), so decisions carried by value can silently re-mask a rejected
+        # value on the next sync/publish. Persist rejected values to the repo
+        # lexicon (action=allow) — every future scan honors them. This covers
+        # ALL reject paths: interactive reviewer, CLI reject-file, MCP
+        # bulk_review/review_detection.
+        try:
+            from localmask.vault_store import get_vault_store, repo_id_for
+            rejected_vals = [d for d in scan["detections"]
+                             if d["det_id"] in decisions
+                             and decisions[d["det_id"]] == "rejected"
+                             and d.get("value")]
+            if rejected_vals:
+                store = get_vault_store(repo_id_for(scan.get("repo_url", "")))
+                for d in rejected_vals:
+                    store.set_lexicon(d["value"], action="allow",
+                                      subtype=d.get("type", ""))
+        except Exception:
+            pass
+        # Keep the 🔑 masked view in sync with the decisions just made
+        _apply_decisions_to_store(
+            scan_id, [d for d in scan["detections"] if d["det_id"] in decisions])
         _audit("review", actor=reviewer, scan_id=scan_id,
                repo=scan.get("repo_url", ""), decided=updated,
                feedback=feedback_added)

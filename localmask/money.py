@@ -11,9 +11,9 @@ numbers) and replaces them per LOCALMASK_MONEY_MODE:
             42,000 RON ->  (0.42*R_SALARY)
             The AI can compare and compute; the absolute figure never leaves
             the machine. R is crypto-random, generated locally, stored in
-            ~/.localmask/money_keys.json (0600). Separate categories (salary /
-            revenue / price / amount) get separate keys so cross-category
-            ratios (e.g. payroll as % of revenue) are not exposed either.
+            ~/.localmask/money_keys.json (0600) — one base per repo. The
+            surrounding text (salary/price) already tells the AI what kind
+            of amount it is.
 
 This is key-based relative pseudonymization, NOT encryption: within one
 category, relative sizes ARE visible to the AI — that is the feature. The
@@ -224,20 +224,19 @@ def money_token(session: dict, value: str, det: dict) -> str:
         digits = len(str(int(num))) if num >= 1 else 1
         return _make_token(session, value, f"AMOUNT_{digits}D_{cur}")
     if mode == "relative":
-        # The protection level is the customer's ONE uniform choice — never
-        # a side effect of detection quality. An amount whose category
-        # wasn't identified stays relative on the generic R_AMOUNT base,
-        # exactly like everything else in this mode; a customer who wants
-        # full opacity picks token/bucket mode for the whole scan.
+        # ONE secret base per repo (user decision): every amount becomes a
+        # ratio to the same R_AMOUNT. The context word (salary/price) is
+        # already visible in the surrounding text, so per-category labels
+        # added nothing — and the AI understands the context on its own.
         try:
             from .vault_store import repo_id_for
             rid = repo_id_for(session.get("src", "") or "")
         except Exception:
             rid = "default"
-        base = _money_base(rid, cat)
+        base = _money_base(rid, "amount")
         ratio = num / base
         for sig in (5, 7, 9, 12):
-            token = f"({ratio:.{sig}g}*R_{cat.upper()})"
+            token = f"({ratio:.{sig}g}*R_AMOUNT)"
             owner = session["rev_vault"].get(token)
             if owner is None or owner == value:
                 break

@@ -88,12 +88,20 @@ def _fetch_latest():
         return None, None
 
 
+def _ver_tuple(v: str) -> tuple:
+    """Loose numeric version tuple: '0.9.6.post1' -> (0,9,6,1)."""
+    import re
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
+
+
 def _update_notice():
     """One-line 'newer version available' string for `localmask license`,
-    or '' if current/offline. Best-effort, silent on any failure."""
+    or '' if current/offline. Best-effort, silent on any failure. Only fires
+    when the published version is strictly NEWER — a dev build ahead of the
+    public release must not be told to 'upgrade' to an older version."""
     cur = _current_version()
     latest, _ = _fetch_latest()
-    if latest and latest != cur:
+    if latest and _ver_tuple(latest) > _ver_tuple(cur):
         return f"⬆ v{latest} available — run: localmask check-updates"
     return ""
 
@@ -841,10 +849,14 @@ class HierarchicalReviewer:
 
             teach_hint = "  [T]each a missed secret" if self._teach_callback else ""
             print(f"\n  {DIM}Navigation: [1-{len(self.type_order)}] select type  "
-                  f"[S]ave{teach_hint}  [Q]uit{RESET}")
+                  f"[F]iles view{teach_hint}  [S]ave  [Q]uit{RESET}")
             print()
 
             choice = self._input(f"  {BOLD}→ Choose: {RESET}")
+
+            if choice.lower() == "f":
+                self.show_files()
+                continue
 
             if choice.lower() == "q":
                 self._save_decisions()
@@ -866,6 +878,58 @@ class HierarchicalReviewer:
                     self.show_instances(self.type_order[idx])
             except ValueError:
                 pass
+
+    # ── LEVEL 1b: Files view — decide a whole file at once ─────────────────
+
+    def show_files(self):
+        while True:
+            files = {}
+            for d in self.detections:
+                files.setdefault(d.file or "?", []).append(d)
+            order = sorted(files, key=lambda f: -len(files[f]))
+
+            self._clear()
+            print(f"\n{BOLD}{'═' * 70}{RESET}")
+            print(f"{BOLD}  Files — approve or reject everything in a file{RESET}")
+            print(f"{'═' * 70}{RESET}\n")
+            for i, f in enumerate(order, 1):
+                dets = files[f]
+                app = sum(1 for d in dets if d.decision is True)
+                rej = sum(1 for d in dets if d.decision is False)
+                pend = len(dets) - app - rej
+                st = (f"{GREEN}✓ approved{RESET}" if app == len(dets)
+                      else f"{RED}✗ rejected — stays readable{RESET}" if rej == len(dets)
+                      else f"{YELLOW}⏳{pend} pending{RESET}  {GREEN}✓{app}{RESET} {RED}✗{rej}{RESET}")
+                print(f"  {BOLD}[{i:>2}]{RESET} {CYAN}{f:<42}{RESET} "
+                      f"{len(dets):>3} detections   {st}")
+            print(f"\n  {DIM}[#] pick a file, then [A]pprove all / [R]eject all "
+                  f"in it.  Rejecting keeps the file READABLE in the masked "
+                  f"mirror (e.g. docs).  [B]ack{RESET}\n")
+
+            choice = self._input(f"  {BOLD}→ File #: {RESET}")
+            if choice.lower() in ("b", "q", ""):
+                return
+            try:
+                f = order[int(choice) - 1]
+            except (ValueError, IndexError):
+                continue
+            dets = files[f]
+            act = self._input(f"  {BOLD}→ {f} — [A]pprove all / [R]eject all "
+                              f"(keep readable) / [C]ancel: {RESET}").lower()
+            if act == "a":
+                for d in dets:
+                    d.decision = True
+                    d.timestamp = datetime.now().isoformat()
+                print(f"  {GREEN}✓ Approved all {len(dets)} in {f}{RESET}")
+            elif act == "r":
+                for d in dets:
+                    d.decision = False
+                    d.timestamp = datetime.now().isoformat()
+                print(f"  {RED}✗ Rejected all {len(dets)} in {f}{RESET} — "
+                      f"it stays readable in the masked mirror.")
+            else:
+                continue
+            self._input("  Press Enter to continue...")
 
     # ── LEVEL 2: Instance List ──────────────────────────────────────────────
 
@@ -1226,6 +1290,27 @@ def _ensure_gitignore(repo_dir: str):
     return True
 
 
+# AI guard: written into <repo>/.claude/settings.json by `init`. These are
+# enforced by Claude Code's PERMISSION ENGINE — the model is blocked from
+# reading raw files in this repo before the call ever runs. The only road to
+# file content is the MCP's read_file_masked (masked). Enforcement, not
+# model goodwill.
+_AI_GUARD_DENY = [
+    "Read(./**)",
+    "Grep",
+    "Bash(cat:*)",
+    "Bash(head:*)",
+    "Bash(tail:*)",
+    "Bash(sed:*)",
+    "Bash(awk:*)",
+    "Bash(grep:*)",
+    "Bash(rg:*)",
+    "Bash(less:*)",
+    "Bash(more:*)",
+    "Bash(strings:*)",
+]
+
+
 _CLAUDE_MD_TEMPLATE = """\
 # MANDATORY: Use LocalMask MCP Tools
 
@@ -1392,6 +1477,43 @@ def cmd_init(args):
             f.write(_CLAUDE_MD_TEMPLATE)
         created.append("CLAUDE.md")
 
+    # 2b. .claude/settings.json — AI guard (hard deny on raw reads).
+    if do_claude and not getattr(args, "no_ai_guard", False):
+        claude_dir = os.path.join(repo_dir, ".claude")
+        os.makedirs(claude_dir, exist_ok=True)
+        spath = os.path.join(claude_dir, "settings.json")
+        cc_settings = {}
+        if os.path.isfile(spath):
+            try:
+                cc_settings = json.loads(open(spath).read())
+            except Exception:
+                cc_settings = {}
+        perms = cc_settings.setdefault("permissions", {})
+        deny = perms.setdefault("deny", [])
+        for rule in _AI_GUARD_DENY:
+            if rule not in deny:
+                deny.append(rule)
+        with open(spath, "w") as f:
+            json.dump(cc_settings, f, indent=2)
+            f.write("\n")
+        created.append(".claude/settings.json  (AI guard: raw reads blocked)")
+
+    # 2c. Example .localmaskignore (never overwrite an existing one)
+    lmi = os.path.join(repo_dir, ".localmaskignore")
+    if not os.path.exists(lmi):
+        with open(lmi, "w") as f:
+            f.write(
+                "# .localmaskignore — files/folders LocalMask must NOT scan.\n"
+                "# Gitignore-style patterns, one per line. Excluded files are\n"
+                "# never scanned AND never published to the masked mirror —\n"
+                "# they simply don't exist on the AI side.\n"
+                "#\n"
+                "# Examples:\n"
+                "#   docs/\n"
+                "#   *.dtsx\n"
+                "#   legacy/**\n")
+        created.append(".localmaskignore  (example — edit to exclude files)")
+
     # 3. .vscode/mcp.json
     if do_vscode:
         vscode_dir = os.path.join(repo_dir, ".vscode")
@@ -1509,6 +1631,9 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
                         help="Generate .mcp.json + CLAUDE.md (default: on)")
     init_p.add_argument("--no-claude-code", action="store_true",
                         help="Skip Claude Code config")
+    init_p.add_argument("--no-ai-guard", action="store_true",
+                        help="Skip the .claude/settings.json deny rules that "
+                             "block the AI from reading raw (unmasked) files")
     init_p.add_argument("--copilot", action="store_true", default=True,
                         help="Generate .github/copilot-instructions.md (default: on)")
     init_p.add_argument("--no-copilot", action="store_true",
@@ -1550,6 +1675,12 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     status_p.add_argument("scan_id", nargs="?", help="Scan ID (omit to list all)")
     status_p.add_argument("--org", default="", help="Filter by org")
 
+    # scan-id — machine-readable: latest scan id for a repo path (used by
+    # editor integrations, e.g. the VS Code key toggle)
+    scanid_p = sub.add_parser("scan-id",
+                              help="Print the latest scan id for a repo path")
+    scanid_p.add_argument("path", nargs="?", default=".", help="Repo path")
+
     # review
     review_p = sub.add_parser("review", help="Interactive hierarchical review")
     review_p.add_argument("scan_id", help="Scan ID from scan command")
@@ -1566,6 +1697,20 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     # approve-all
     approve_p = sub.add_parser("approve-all", help="Approve all detections + submit")
     approve_p.add_argument("scan_id", help="Scan ID")
+
+    # reject-file / approve-file — decide a whole file at once, 100% locally
+    # (no AI involved: review happens BEFORE anything is shown to a model).
+    rejf_p = sub.add_parser(
+        "reject-file",
+        help="Reject every detection in a file (keep it readable in the mirror)")
+    rejf_p.add_argument("file", help="Repo-relative path, e.g. docs/runbook.md")
+    rejf_p.add_argument("--scan", default="",
+                        help="Scan ID (default: latest scan of this repo)")
+    appf_p = sub.add_parser(
+        "approve-file", help="Approve every detection in a file")
+    appf_p.add_argument("file", help="Repo-relative path, e.g. docs/runbook.md")
+    appf_p.add_argument("--scan", default="",
+                        help="Scan ID (default: latest scan of this repo)")
 
     # grant-ai — give an AI its own read-only access to the masked mirror
     grant_p = sub.add_parser(
@@ -1606,8 +1751,13 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     #         persisted so it applies on every future scan/sync of this repo.
     teach_p = sub.add_parser(
         "teach", help="Teach a missed secret (or ignore a false positive)")
-    teach_p.add_argument("scan_id", help="Scan ID to apply the value to")
-    teach_p.add_argument("value", help="The exact secret value the scanner missed")
+    # Both forms work:  teach <value>   (uses this repo's latest scan)
+    #                   teach <scan_id> <value>
+    teach_p.add_argument("scan_id",
+                         help="Scan ID — or just the value: when run inside a "
+                              "scanned repo the latest scan is used")
+    teach_p.add_argument("value", nargs="?", default="",
+                         help="The exact secret value the scanner missed")
     teach_p.add_argument("--subtype", "-s", default="SECRET",
                          help="Token type/name for the masked value (e.g. API_KEY)")
     teach_p.add_argument("--allow", action="store_true",
@@ -1799,16 +1949,63 @@ Full details: FINANCE.md""")
         sys.stdout.write(_rehydrate(session, text))
         return
 
+    # ── scan-id (local, machine-readable) ────────────────────────────────────
+    if args.command == "scan-id":
+        from localmask.state import SCANS, _load_persisted_scans
+        _load_persisted_scans()
+        want = os.path.realpath(os.path.expanduser(args.path))
+        for scan in sorted(SCANS.values(),
+                           key=lambda s: s.get("created_at", ""), reverse=True):
+            got = scan.get("repo_url", "")
+            if got.startswith(("http://", "https://", "git@")):
+                continue
+            got = os.path.expanduser(got)
+            try:
+                # samefile handles case-insensitive filesystems (macOS) and
+                # symlinks — string comparison misses both.
+                if os.path.samefile(got, want):
+                    print(scan["scan_id"])
+                    return
+            except OSError:
+                continue
+        print("", end="")
+        sys.exit(1)
+
     # ── mask-text (local) ────────────────────────────────────────────────────
     if args.command == "mask-text":
-        from localmask.state import _new_session, _get_or_load_scan
-        from localmask.engine import _scan_file
+        from localmask.state import (_new_session, _get_or_load_scan,
+                                     _masked_from_store, _update_masked_store)
         scan = _get_or_load_scan(args.scan_id)
         if not scan:
             print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
-        session = _new_session(scan["repo_url"], temp=False)
-        text = open(args.file).read() if args.file else sys.stdin.read()
-        sys.stdout.write(_scan_file(session, text, "input.txt")["masked"])
+        # Fast path: the scan (and every sync) persists masked content to
+        # ~/.localmask/masked/<scan_id>/. If the working file is unchanged
+        # since then, serve it straight from disk — no engine, no re-scan.
+        if args.file:
+            stored = _masked_from_store(args.scan_id, scan["repo_url"], args.file)
+            if stored is not None:
+                sys.stdout.write(stored)
+                return
+        from localmask.engine import _scan_file
+        # Loader/status prints must not pollute the masked output — tools
+        # (e.g. the VS Code key-toggle extension) consume stdout verbatim.
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):
+            session = _new_session(scan["repo_url"], temp=False)
+            # Match the original scan's sensitivity, and keep the real file
+            # name — file-type rule packs (xml/.config, json, yaml, …) only
+            # fire for the right extension.
+            session["sensitivity"] = scan.get("summary_stats", {}).get(
+                "sensitivity", "standard")
+            rel_name = os.path.basename(args.file) if args.file else "input.txt"
+            text = open(args.file).read() if args.file else sys.stdin.read()
+            masked = _scan_file(session, text, rel_name)["masked"]
+            # Cache the fresh result so the next view of this (edited) file
+            # hits the fast path until the next scan/sync replaces it.
+            if args.file:
+                _update_masked_store(args.scan_id, scan["repo_url"],
+                                     args.file, masked)
+        sys.stdout.write(masked)
         return
 
     # ── export masked repo to a local folder (AI reads it, no keys) ──────────
@@ -1837,6 +2034,17 @@ Full details: FINANCE.md""")
         print(f"  {DIM}Point your AI tool / agent at this folder — it reads the "
               f"masked code with no keys, no repo permissions, no secrets.{RESET}")
         return
+
+    # ── ask is a Pro capability (masked cloud Q&A) — gate cleanly for Free ────
+    #    Covers BOTH the local bring-your-own-key path and the hosted path so a
+    #    Free user gets one clear upgrade message instead of a usage-limited taste.
+    if args.command == "ask":
+        from localmask._edition import require
+        try:
+            require("ask_ai")
+        except PermissionError as e:
+            print(f"  {YELLOW}⚡ {e}{RESET}")
+            return
 
     # ── ask (local, bring-your-own-key, any provider) ────────────────────────
     if args.command == "ask" and not _is_connected():
@@ -2003,6 +2211,83 @@ Full details: FINANCE.md""")
         print(f"  {DIM}Publish:{RESET} localmask publish {args.scan_id} <git-url>")
         return
 
+    if args.command in ("reject-file", "approve-file"):
+        from server_core import _get_or_load_scan, _persist_scan
+        from localmask.state import SCANS, _load_persisted_scans
+        scan_id = args.scan
+        if not scan_id:
+            _load_persisted_scans()
+            best_t = ""
+            for sid, sc in SCANS.items():
+                repo = sc.get("repo_url", "")
+                try:
+                    if repo and os.path.isdir(repo) \
+                            and os.path.samefile(repo, os.getcwd()) \
+                            and sc.get("created_at", "") > best_t:
+                        scan_id, best_t = sid, sc.get("created_at", "")
+                except OSError:
+                    continue
+        scan = _get_or_load_scan(scan_id) if scan_id else None
+        if not scan:
+            print(f"  {RED}✗ No scan found.{RESET} Run from the repo root, or "
+                  f"pass --scan <scan_id>.")
+            return
+        decision = "rejected" if args.command == "reject-file" else "approved"
+        norm = args.file.replace("\\", "/").lstrip("./")
+        hits = [d for d in scan.get("detections", [])
+                if d.get("file", "").replace("\\", "/") == norm
+                or norm in (d.get("files") or [])]
+        if not hits:
+            print(f"  {YELLOW}No detections in '{args.file}'.{RESET}")
+            return
+        for d in hits:
+            d["decision"] = decision
+        _persist_scan(scan_id)
+        from localmask.state import _apply_decisions_to_store
+        _apply_decisions_to_store(scan_id, hits)
+        if decision == "rejected":
+            # Make the rejection DURABLE: write each value to the repo
+            # lexicon as allowed. Re-scans (sync/publish) are not fully
+            # deterministic (LLM gate), so carrying decisions by value can
+            # lose rejections — the lexicon survives every re-scan.
+            try:
+                from localmask.vault_store import get_vault_store, repo_id_for
+                store = get_vault_store(repo_id_for(scan.get("repo_url", "")))
+                n_lex = 0
+                for d in hits:
+                    v = d.get("value")
+                    if v:
+                        store.set_lexicon(v, action="allow",
+                                          subtype=d.get("type", ""))
+                        n_lex += 1
+                print(f"  {DIM}Persisted {n_lex} value(s) to the repo lexicon "
+                      f"— they stay unmasked across every future scan.{RESET}")
+            except Exception:
+                pass
+        verb = "Rejected" if decision == "rejected" else "Approved"
+        print(f"  {GREEN}✓ {verb} {len(hits)} detection(s) in "
+              f"{BOLD}{norm}{RESET} {DIM}({scan_id}){RESET}")
+        if decision == "rejected":
+            # Deterministic second look: things in this file that look like
+            # REAL secrets will now be readable wherever the mirror goes.
+            risky = [d for d in hits
+                     if d.get("confidence", 0) >= 0.85
+                     and any(k in d.get("type", "").lower()
+                             for k in ("password", "secret", "key", "token",
+                                       "credential", "arn", "webhook"))]
+            if risky:
+                print(f"  {YELLOW}⚠ {len(risky)} of them look like genuine "
+                      f"secrets and will be readable in the mirror:{RESET}")
+                for d in risky[:6]:
+                    print(f"    {d.get('det_id')}  {d.get('type')}  "
+                          f"line {d.get('line')}  conf {d.get('confidence'):.0%}")
+                print(f"  {DIM}Re-approve one: localmask review {scan_id} "
+                      f"(terminal, local){RESET}")
+        pend = sum(1 for d in scan.get("detections", [])
+                   if d.get("decision") in (None, "pending"))
+        print(f"  {DIM}Pending overall:{RESET} {pend}")
+        return
+
     if args.command == "submit" and not _is_connected():
         _hint = {
             "submit":      "The submit/approval workflow is a hosted "
@@ -2086,6 +2371,9 @@ Full details: FINANCE.md""")
             print(f"  {BOLD}Scan ID:{RESET}     {CYAN}{scan_id}{RESET}")
             print(f"  {DIM}Files:{RESET}       {stats.get('total_files', 0)}")
             print(f"  {DIM}Detections:{RESET}  {RED}{stats.get('total_detections', 0)}{RESET}")
+            if stats.get('excluded_files'):
+                print(f"  {YELLOW}Excluded:{RESET}    {stats['excluded_files']} "
+                      f"file(s) via .localmaskignore — not scanned, not published")
             by_type = stats.get("by_type", {})
             if by_type:
                 print(f"\n  {BOLD}By type:{RESET}")
@@ -2120,6 +2408,9 @@ Full details: FINANCE.md""")
         print(f"  {BOLD}Scan ID:{RESET}     {CYAN}{scan_id}{RESET}")
         print(f"  {DIM}Files:{RESET}       {stats.get('total_files', 0)}")
         print(f"  {DIM}Detections:{RESET}  {RED}{stats.get('total_detections', 0)}{RESET}")
+        if stats.get('excluded_files'):
+            print(f"  {YELLOW}Excluded:{RESET}    {stats['excluded_files']} "
+                  f"file(s) via .localmaskignore — not scanned, not published")
         print(f"  {DIM}Status:{RESET}      draft")
 
         by_type = stats.get("by_type", {})
@@ -2498,6 +2789,28 @@ Full details: FINANCE.md""")
     elif args.command == "teach":
         scan_id = args.scan_id
         value = args.value
+        if not value:
+            # `teach <value>` form — the positional we got is the value;
+            # resolve the current repo's latest scan from cwd.
+            value = scan_id
+            from localmask.state import SCANS, _load_persisted_scans
+            _load_persisted_scans()
+            scan_id, best_t = "", ""
+            for sid, sc in SCANS.items():
+                repo = sc.get("repo_url", "")
+                try:
+                    if repo and os.path.isdir(repo) \
+                            and os.path.samefile(repo, os.getcwd()):
+                        if sc.get("created_at", "") > best_t:
+                            scan_id, best_t = sid, sc.get("created_at", "")
+                except OSError:
+                    continue
+            if not scan_id:
+                print(f"  {RED}✗ No scan found for this directory.{RESET} "
+                      f"Run from the repo root, or pass the scan id: "
+                      f"localmask teach <scan_id> <value>")
+                return
+            print(f"  {DIM}Using latest scan: {scan_id}{RESET}")
         action = "allow" if args.allow else "mask"
         if not _is_connected():
             from server_core import _get_or_load_scan
@@ -2527,7 +2840,22 @@ Full details: FINANCE.md""")
             added = result.get("new_detections", 0)
             occ = f"{hits} occurrence" + ("s" if hits != 1 else "")
             if action == "mask" and added == 0:
-                # Present in the text but the re-scan didn't add a detection.
+                # No NEW detection — but that usually means the value was
+                # already tracked (e.g. first caught inside a connection
+                # string): the existing detection/token simply covers the
+                # extra occurrences now. Check before crying wolf.
+                sc2 = _get_or_load_scan(scan_id) or {}
+                existing = next((d for d in sc2.get("detections", [])
+                                 if d.get("value") == value), None)
+                if existing:
+                    n_files = len(existing.get("files", []) or [existing.get("file")])
+                    print(f"  {GREEN}✓ Found {occ}{RESET} — value was already "
+                          f"tracked as {CYAN}{existing.get('token')}{RESET} "
+                          f"({existing.get('det_id')}); all occurrences across "
+                          f"{n_files} file(s) are masked with that token.")
+                    print(f"  {DIM}Nothing new to review — the existing "
+                          f"detection covers it.{RESET}")
+                    return
                 print(f"  {YELLOW}⚠ Found {occ} in the source, but no new "
                       f"detection was added.{RESET}")
                 print(f"  {DIM}It may sit inside an already-masked secret, or be "

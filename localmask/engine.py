@@ -27,6 +27,7 @@ TEXT_EXTS  = {".sql", ".py", ".yaml", ".yml", ".env", ".json", ".xml",
               ".html", ".css", ".ipynb", ".r", ".scala",
               ".swift", ".kt", ".kts", ".gradle", ".properties", ".plist",
               ".rst", ".adoc", ".csproj", ".props", ".bash", ".zsh",
+              ".csv", ".tsv",
               ".cls", ".trigger", ".apex",
               ".key", ".pem", ".crt", ".cer", ".pub"}
 
@@ -800,6 +801,254 @@ def _scan_entropy_strings(content: str, file_ext: str,
     return results
 
 
+# Column-header keywords → semantic type for CSV/TSV data extracts.
+# Matched as substrings of the normalized (lowercased, alnum_) header.
+_CSV_PII_COLUMNS = {
+    "name":        "person_name",
+    "email":       "email",
+    "mail":        "email",
+    "phone":       "phone",
+    "mobile":      "phone",
+    "ssn":         "national_id",
+    "social_sec":  "national_id",
+    "tax_id":      "national_id",
+    "passport":    "national_id",
+    "license":     "national_id",
+    "dob":         "date_of_birth",
+    "birth":       "date_of_birth",
+    "card":        "credit_card",
+    "pan":         "credit_card",
+    "cvv":         "credit_card",
+    "iban":        "bank_account",
+    "swift":       "bank_account",
+    "account_num": "bank_account",
+    "routing":     "bank_account",
+    "address":     "street_address",
+    "street":      "street_address",
+    "salary":      "money_value",
+    "income":      "money_value",
+    "balance":     "money_value",
+    "amount":      "money_value",
+    "sum":         "money_value",
+    "total":       "money_value",
+    "price":       "money_value",
+    "payment":     "money_value",
+    "revenue":     "money_value",
+    "cost":        "money_value",
+}
+
+# Short/ambiguous keywords match only as a whole underscore-segment of the
+# header ("sum" must not fire on "summary", "pan" not on "company").
+_CSV_SEGMENT_ONLY = {"sum", "pan", "dob", "cost"}
+
+# Header names that contain a PII keyword but are NOT PII (e.g. "hostname"
+# contains "name" — but a data-extract "hostname" column is infra, mask it
+# anyway; "filename"/"username" are the real exceptions to auto-masking).
+_CSV_COLUMN_SKIP = {"filename", "file_name", "column_name", "table_name",
+                    "field_name", "display_name_format"}
+
+
+def _llm_text_spans(values: list, col_name: str) -> tuple:
+    """Ask the LOCAL LLM which exact substrings of each value are sensitive.
+    Reuses the CommentScanner machinery (same purpose: LLM span extraction
+    from prose) with a data-extract prompt covering personal-sensitive
+    categories. Returns (category, {value: [spans]}) — empty category means
+    the column is clean. 100% local; nothing leaves the machine."""
+    if not _get_pro():          # LLM layers are a Pro capability
+        return "", {}
+    try:
+        from comment_scanner import CommentScanner, _DATA_PROMPT
+    except ImportError:
+        return "", {}
+    block = "\n".join(v[:200].replace("\n", " ") for v in values)
+    try:
+        findings = CommentScanner()._extract_from_window(
+            {"block_text": block}, prompt=_DATA_PROMPT)
+    except Exception:
+        return "", {}
+    out: dict = {}
+    types: list = []
+    for f in findings:
+        entity = (f.get("entity") or "").strip()
+        if len(entity) < 3:
+            continue
+        offset = f.get("line_offset", None)
+        # Prefer the line the LLM pointed at; fall back to substring search.
+        targets = []
+        if isinstance(offset, int) and 0 <= offset < len(values):
+            targets = [values[offset]]
+        for v in targets or values:
+            if entity in v:
+                out.setdefault(v, [])
+                if entity not in out[v]:
+                    out[v].append(entity)
+                types.append((f.get("type") or "other_pii").strip())
+                break
+    if not out:
+        return "", {}
+    category = max(set(types), key=types.count) if types else "other_pii"
+    return category, out
+
+
+def _llm_column_verdict(samples: list, col_name: str) -> tuple:
+    """Last tier for text columns patterns/NER can't decide: the local LLM
+    looks at a few more samples. Majority of samples with sensitive spans
+    marks the column. Returns (category, {value: [spans]})."""
+    category, spans = _llm_text_spans(samples, col_name)
+    if not category or len(spans) * 2 <= len(samples):  # strict majority
+        return "", {}
+    return category, spans
+
+
+def _infer_column_type(samples: list, sensitivity: str, ner,
+                       col_name: str = "", llm_samples: list = None,
+                       use_llm: bool = True) -> tuple:
+    """Columns are homogeneous — decide a column's type ONCE from 2-3 sample
+    values instead of detecting cell by cell. A type wins when it fires on
+    at least 2 samples (or on the single sample available). When patterns
+    and NER are both inconclusive on a text column, a few more samples go to
+    the local LLM for the final word (100% local).
+
+    Returns (type, llm_spans): llm_spans is None for pattern/NER verdicts
+    (whole-cell masking) and a {value: [spans]} dict for LLM text verdicts —
+    prose cells mask only the sensitive substrings, not the whole text."""
+    votes: dict = {}
+    for v in samples:
+        types = set()
+        try:
+            for d in RegexRulesSafe.scan_file("column_sample.txt", v, sensitivity):
+                # Only accept detections that cover (essentially) the whole
+                # cell — a substring hit doesn't describe the column.
+                if len(d.get("entity", "")) >= max(4, int(len(v) * 0.6)):
+                    types.add(d.get("type", ""))
+        except Exception:
+            pass
+        if ner and not types:
+            try:
+                for h in ner.scan(v, "column_sample.txt", sensitivity):
+                    if h.get("entity", "") == v:
+                        types.add(h.get("type", "ner_person"))
+            except Exception:
+                pass
+        for t in types:
+            votes[t] = votes.get(t, 0) + 1
+    if votes:
+        best, count = max(votes.items(), key=lambda kv: kv[1])
+        need = 2 if len(samples) >= 2 else 1
+        if count >= need:
+            return best, None
+        return "", None
+    # Patterns + NER said nothing — for text-looking values, let the local
+    # LLM look at a few more samples before declaring the column safe.
+    if use_llm and any(re.search(r"[A-Za-z]{3}", v) for v in samples):
+        return _llm_column_verdict(llm_samples or samples, col_name)
+    return "", None
+
+
+def _scan_csv_columns(content: str, file_ext: str,
+                      sensitivity: str = "standard", ner=None,
+                      use_llm: bool = True) -> list:
+    """Deterministic column masking for data files. Two passes over the
+    header: (1) a column whose NAME declares a PII/finance field is masked
+    outright; (2) for the rest, the column type is inferred from 2-3 sample
+    VALUES (columns are homogeneous — no need to detect every cell), and a
+    sensitive verdict masks the whole column. Either way, once a column is
+    sensitive EVERY cell is a detection — no checksum or per-cell model
+    recall in the loop, so a data extract can't leak on a miss."""
+    import csv as _csv
+    import io as _io
+    delim = "\t" if file_ext == "tsv" else ","
+    try:
+        rows = list(_csv.reader(_io.StringIO(content), delimiter=delim))
+    except _csv.Error:
+        return []
+    if len(rows) < 2:
+        return []
+
+    header = [h.strip() for h in rows[0]]
+    sensitive: dict = {}          # column index → semantic type
+    span_cols: dict = {}          # column index → {value: [sensitive spans]}
+    for idx, col in enumerate(header):
+        norm = re.sub(r"[^a-z0-9_]", "_", col.lower())
+        if norm in _CSV_COLUMN_SKIP:
+            continue
+        segments = set(norm.split("_"))
+        for kw, sem in _CSV_PII_COLUMNS.items():
+            hit = kw in segments if kw in _CSV_SEGMENT_ONLY else kw in norm
+            if hit:
+                sensitive[idx] = sem
+                break
+
+    # Pass 2: header said nothing — let 2-3 sample values decide the column.
+    for idx in range(len(header)):
+        if idx in sensitive:
+            continue
+        samples = []
+        for row in rows[1:]:
+            if idx < len(row):
+                v = row[idx].strip()
+                if len(v) >= 4 and v not in samples:
+                    samples.append(v)
+            if len(samples) == 5:      # 3 decide fast; 5 for the LLM tier
+                break
+        if not samples:
+            continue
+        inferred, llm_spans = _infer_column_type(
+            samples[:3], sensitivity, ner,
+            col_name=header[idx], llm_samples=samples, use_llm=use_llm)
+        if inferred:
+            sensitive[idx] = inferred
+            if llm_spans is not None:
+                span_cols[idx] = llm_spans
+
+    if not sensitive:
+        return []
+
+    # LLM text columns mask only the sensitive substrings inside each cell —
+    # extract spans for the remaining distinct values (batched, capped; any
+    # value we can't get spans for falls back to whole-cell = fail-safe).
+    _SPAN_BATCH, _SPAN_CAP = 8, 48
+    for idx, known in span_cols.items():
+        distinct = []
+        for row in rows[1:]:
+            if idx < len(row):
+                v = row[idx].strip()
+                if len(v) >= 4 and v not in known and v not in distinct:
+                    distinct.append(v)
+        for i in range(0, min(len(distinct), _SPAN_CAP), _SPAN_BATCH):
+            _, spans = _llm_text_spans(distinct[i:i + _SPAN_BATCH], header[idx])
+            known.update(spans)
+
+    detections = []
+    line_no = 1
+    for row in rows[1:]:
+        line_no += 1
+        for idx, sem in sensitive.items():
+            if idx >= len(row):
+                continue
+            value = row[idx].strip()
+            if len(value) < 2:
+                continue
+            det = {
+                "type":           f"csv_{sem}",
+                "confidence":     0.97,
+                "line":           line_no,
+                "context":        f"column '{header[idx]}'",
+                "file_type":      file_ext,
+                "pattern_reason": f"csv_column:{header[idx]}",
+            }
+            if idx in span_cols:
+                spans = span_cols[idx].get(value)
+                if spans is not None:
+                    # LLM examined this cell — mask only the sensitive parts.
+                    for s in spans:
+                        detections.append({**det, "entity": s})
+                    continue
+                # Never examined (cap/extraction failure) → whole cell.
+            detections.append({**det, "entity": value})
+    return detections
+
+
 def _scan_file(session: dict, content: str, rel_path: str) -> dict:
     """Detect, mask, and return file dict.
     Layers:  1) Regex rules  2) NER (freetext)  3) BERT re-scoring
@@ -821,7 +1070,9 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
 
     # ── Layer 2: NER (freetext files: .md, .txt, .rst, .adoc) ────────────
     ner = _get_ner()
-    freetext_exts = {"md", "txt", "rst", "adoc", "log", ""}
+    # csv/tsv: data exports are prose-like — PII (person names, addresses)
+    # lives in cell values, which only the NER layer can recognize.
+    freetext_exts = {"md", "txt", "rst", "adoc", "log", "", "csv", "tsv"}
     if ner and file_ext in freetext_exts:
         ner_hits = ner.scan(content, rel_path, sensitivity)
         for hit in ner_hits:
@@ -829,6 +1080,16 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
                 continue
             hit["pattern_reason"] = hit.get("pattern_reason", f"NER:{hit.get('ner_label','')}")
             raw_detections.append(hit)
+
+    # ── Layer 2b: CSV/TSV column-header PII (deterministic, complete) ────
+    # In a data extract the column NAME declares what every cell is. A value
+    # in a `credit_card` column is sensitive even if it fails a checksum, and
+    # a `full_name` column must not depend on NER recall. Mask entire columns
+    # whose header matches a sensitive name — no misses on data files.
+    if file_ext in ("csv", "tsv"):
+        raw_detections.extend(
+            _scan_csv_columns(content, file_ext, sensitivity, ner,
+                              use_llm=not session.get("skip_llm")))
 
     # ── Layer 3: Entropy-based secret scanner ─────────────────────────────
     # NB: the entropy scanner MUTATES the set it's given (adds each value it
@@ -1084,17 +1345,58 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
             "status": status, "findings": findings, "n": len(findings)}
 
 
+# ── .localmaskignore — user-controlled scan exclusions ──────────────────────
+# Gitignore-style patterns at the repo root. Excluded files are never
+# scanned, so they are also absent from the masked store and the published
+# mirror (fail-safe: unscanned content is never published raw).
+
+def _load_localmask_ignore(src_dir: str) -> list:
+    patterns = []
+    try:
+        with open(os.path.join(src_dir, ".localmaskignore")) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    patterns.append(line.rstrip("/"))
+    except OSError:
+        pass
+    return patterns
+
+
+def _is_ignored(rel: str, patterns: list) -> bool:
+    if not patterns:
+        return False
+    import fnmatch
+    rel = rel.replace("\\", "/")
+    base = os.path.basename(rel)
+    segs = rel.split("/")
+    for pat in patterns:
+        if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(base, pat):
+            return True
+        # directory pattern: matches any leading path segment / prefix
+        if "/" not in pat and pat in segs[:-1]:
+            return True
+        if fnmatch.fnmatch(rel, pat + "/*") or fnmatch.fnmatch(rel, pat + "/**"):
+            return True
+    return False
+
+
 def _scan_dir(session: dict, src_dir: str):
     """Walk directory and scan every text file.
     If inside a git repo, only scan git-tracked files (respects .gitignore)."""
     files: dict = {}
     tracked = _git_tracked_files(src_dir)
+    ignore_patterns = _load_localmask_ignore(src_dir)
+    session["ignored_count"] = 0
 
     if tracked is not None:
         # Git repo — only scan tracked + untracked-but-not-ignored files
         for rel in sorted(tracked):
             fname = os.path.basename(rel)
-            if fname in SKIP_FILES:
+            if fname in SKIP_FILES or fname == ".localmaskignore":
+                continue
+            if _is_ignored(rel, ignore_patterns):
+                session["ignored_count"] += 1
                 continue
             fpath = os.path.join(src_dir, rel)
             if not os.path.isfile(fpath) or not _is_text(fpath):
@@ -1113,7 +1415,11 @@ def _scan_dir(session: dict, src_dir: str):
             for fname in sorted(filenames):
                 fpath = os.path.join(dirpath, fname)
                 rel   = os.path.relpath(fpath, src_dir)
-                if fname in SKIP_FILES or not _is_text(fpath):
+                if fname in SKIP_FILES or fname == ".localmaskignore" \
+                        or not _is_text(fpath):
+                    continue
+                if _is_ignored(rel, ignore_patterns):
+                    session["ignored_count"] += 1
                     continue
                 try:
                     if os.path.getsize(fpath) > 500_000:

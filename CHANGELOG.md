@@ -1,40 +1,68 @@
+# 0.9.8 (2026-07-28)
+
+- Instant masked views: scans/syncs persist masked content; mask-text and the
+  VS Code key toggle serve it in ~0.5s; review decisions update it immediately
+- VS Code extension shipped in ALL edition tarballs: shield menu (scan/sync,
+  approve, publish, review, teach hidden-input, hook), stage badge, key toggle
+  for every file type
+- Local-only review: reject-file/approve-file, reviewer Files view, durable
+  lexicon rejections (survive re-scans); teach needs no scan id
+- .localmaskignore: gitignore-style scan exclusions (excluded = never scanned,
+  never published); scan summary reports the count
+- MCP hardening: teach tool removed (no secret values through chat),
+  get_file_masked sanitization, deterministic review board with clickable
+  refs, bulk_review per-file form, latest-scan defaults; init writes AI-guard
+  deny rules (.claude/settings.json) blocking raw reads
+- Detection: ConvertTo-SecureString/PSCredential passwords, SMTP password
+  assignments, single-segment SendGrid keys, SQL finance-column numerics
+- Fix: update hint only for strictly newer published versions
+
 # Changelog
 
 All notable changes to LocalMask. Dates are release dates.
 
-## 0.9.7 — 2026-07-22
+## 0.9.7 — 2026-07-27
 
-Language pack edition gate.
+Detection coverage + IDE release: the LLM gate can no longer veto pattern
+rules, strict-mode coverage extended to infra values, and a VS Code key-toggle
+extension for flipping any file between real and masked view.
+
+### Fixed
+- **LLM gate no longer drops deterministic pattern-rule detections** — the
+  classifier may only demote heuristic hits (entropy, NER). It was silently
+  un-masking real infra values the regex layer had already caught (SQL DECLARE
+  server/API literals, JSON `database`/`port` fields). Fail-safe = mask.
+- **Scan sensitivity is persisted** (`summary_stats.sensitivity`) — `sync` and
+  `mask-text` re-scan at the sensitivity the user chose. Both previously fell
+  back to `standard`, so strict-level rules vanished on every re-scan.
+- **`mask-text` uses the real file name and scan sensitivity** — file-type rule
+  packs (xml/.config, json, sql, …) only fire for the right extension; scanning
+  as `input.txt` lost them. Loader/status prints moved off stdout so consumers
+  (the VS Code extension) get clean masked content.
+- **`swift_bic` keyword-anchored** — at strict it matched any 8/11-char
+  uppercase word (68 false positives on one repo).
 
 ### Added
-- **Language pack edition gate** — all non-English language packs except Hebrew (`he`) now require LocalMask Pro. Hebrew and English patterns stay free in all editions. Attempting to load a gated pack without a Pro license prints a clear upgrade notice and falls back to free packs only. Set `LOCALMASK_LANGS=he` or leave unset for free usage.
-
-### Changed
-- Benchmark / recall test suite removed from the source tree (see release notes for accuracy figures: ~97% recall on 11-repo corpus).
-
-## 0.9.6 — 2026-07-22
-
-Expanded PII detection and 9th language pack (India).
-
-### Added
-- **DOB / date-of-birth** — labeled patterns (`dob:`, `birth_date:`, `birthday:`, `birth_day:`)
-- **CVV / card security code** — `cvv:`, `cvc:`, `security_code:`, `atm_pin:`, `card_pin:`, `pin_number:` (3–6 digits)
-- **Card expiry** — `expiry:`, `exp_date:`, `card_expiry:`, `valid_thru:` (MM/YY and MM/YYYY formats)
-- **Passport number** — `passport:`, `passport_no:`, `passport_number:` (flexible label)
-- **National ID** — `national_id:`, `national_number:`, `civil_id:`, `personal_id:`, `voter_id:`, `resident_id:`, `tax_id:` (flexible label)
-- **UK National Insurance number** — `NI` + `[A-Z]{2}[0-9]{6}[ABCD]` (case-sensitive, requires label)
-- **GPS coordinates** — labeled `latitude:` / `longitude:` or bare `lat:` / `lon:` decimal pairs
-- **URL query secrets** — `?api_key=`, `?token=`, `?secret=`, `?pwd=`, `?pass=`, `?session_token=`, `?refresh_token=`, `?oauth_token=`, `?auth_code=`, `?id_token=`, `?subscription_key=`
-- **VIN** — labeled `vin:`, `chassis:`, `frame_no:` (17-char alphanumeric, case-sensitive format guard)
-- **License plate** — labeled `plate:`, `license_plate:`, `car_plate:`, `car_reg:` (case-sensitive value guard)
-- **India language pack** — PAN (`AAAAA9999A` format, checksum-validated), Aadhaar (12-digit, Luhn-validated), GSTIN (15-char, case-sensitive)
-- **9 language packs total**: Romania · Hebrew · Russian · Arabic · Spanish · French · German · Italian · Hindi
-- **Customer/order/invoice/booking IDs** — all 9 lang packs now include native-language keywords for order, invoice, booking/reservation, contract, and reference numbers
-
-### Changed
-- **`LOCALMASK_LANGS` default changed from `all` to `none`** — language packs must now be explicitly opted in. Set `LOCALMASK_LANGS=he,ru` (or `all`) to enable. Avoids unexpected FPs from patterns for languages you don't use.
-- **`labeled_customer_id`** extended with order, invoice, booking, reservation, contract, reference, ticket, transaction, case keywords
-- **`prefixed_customer_id`** extended with `ORD-`, `INV-`, `TXN-`, `TKT-`, `TICKET-`, `BKG-`, `CASE-`, `REF-` prefixes
+- **VS Code extension: LocalMask Key Toggle** (`integrations/vscode-localmask/`)
+  — a status-bar 🔑 (Cmd+Alt+K) flips the active editor between real values and
+  a read-only masked view via `localmask mask-text`. Scan id auto-detected from
+  the repo's LocalMask git hook.
+- **New pattern rules**: `xml_db_attr` (Initial Catalog / Database in
+  connection strings), `sql_declare_secret` + `sql_declare_infra` (secret and
+  server/endpoint literals in SQL DECLARE), `json_port`, and a universal
+  `internal_url` rule (URLs on internal/corp hosts).
+- **CSV/TSV support with deterministic column masking** — data files are now
+  scanned (previously skipped entirely). Every cell in a column whose header
+  names a PII/finance field (name, email, phone, ssn, card, iban, address,
+  salary, balance, amount, sum, total, …) is masked — no checksum or model
+  recall in the loop, so a data extract can't leak on a miss. Columns the
+  header doesn't identify are classified ONCE from 2-3 sample values (columns
+  are homogeneous — no per-cell detection), then masked column-wide. Person
+  names in free cells are additionally caught by NER. Free-TEXT columns the
+  patterns can't decide go to the local LLM (CommentScanner machinery, new
+  data-extract prompt: health, ethnicity, names, finances…): if samples come
+  back sensitive, ALL values are examined and only the sensitive substrings
+  are masked — prose stays readable, secrets don't. 100% local.
 
 ## 0.9.5 — 2026-07-19
 

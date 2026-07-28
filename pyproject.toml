@@ -4,43 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localmask"
-version = "0.9.7"
-description = "Privacy-first secret & PII masking for code — 100% local, no phone-home."
+version = "0.9.8"
+description = "Privacy-first secret detection & masking for code repositories. 100% local — secrets never leave your machine."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
-authors = [{ name = "Shai Gury", email = "feedback@localmaskpro.com" }]
-keywords = [
-    "secrets", "secret-scanning", "pii", "masking", "security",
-    "credentials", "detect-secrets", "privacy", "mcp", "devsecops",
-]
-dependencies = ["pyyaml>=6.0.1", "gitpython>=3.1.40", "mcp>=1.28.0"]
-
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Topic :: Security",
-    "Topic :: Software Development :: Quality Assurance",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Environment :: Console",
-    "Operating System :: OS Independent",
+license = { text = "Proprietary" }
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.4.0",
+    "pyyaml>=6.0.1",
+    "gitpython>=3.1.40",
+    "requests>=2.31.0",
+    "mcp>=1.28.0",
 ]
 
-[project.urls]
-Homepage = "https://www.localmaskpro.com"
-Source = "https://github.com/sgury/localmask"
-Issues = "https://github.com/sgury/localmask/issues"
+[project.optional-dependencies]
+ner = ["spacy>=3.7.0"]
+askai = ["anthropic>=0.25.0", "openai>=1.12.0"]
+org = ["redis>=5.0.0"]
 
 [project.scripts]
 localmask = "cli:main"
-localmask-mcp = "mcp_server:main"
 
 [tool.setuptools]
 packages = ["localmask"]
-py-modules = ["cli", "mcp_server", "server_core", "regex_rules_safe", "ner_scanner", "licensing"]
-
-[tool.setuptools.package-data]
-localmask = ["*.json"]
+py-modules = [
+    "cli", "server", "server_core", "mcp_server",
+    "regex_rules_safe", "sensitivity_classifier", "ner_scanner",
+    "detector_pipeline", "licensing", "org_rules",
+    "rehydration_engine", "safe_scanner",
+]
