@@ -1,3 +1,21 @@
+# 0.9.9 (2026-07-28)
+
+- In-editor review: `localmask decide approved|rejected --file <path> [--line N]`
+  — non-interactive decisions addressed the way editors think (file+line)
+- File-scoped lexicon: rejecting a whole FILE keeps its values readable only
+  in that file — the same value elsewhere in the repo stays masked
+- Taught values always mask: the key-position guard can no longer swallow a
+  user-taught value inside name="…" attributes (teach is instant now)
+- `teach --stdin`: IDE integrations pass values over stdin — never argv,
+  never shell history
+- VS Code extension 0.2.0: Problems-panel review with lightbulb
+  approve/reject, inline state highlights, review sidebar (value-first),
+  right-click teach-by-marking, real⇄masked diff, on-save sync, custom teach
+  categories — every surface opt-in with its own setting
+- New: JetBrains plugin (PyCharm/IDEA/DataGrip) — status-bar shield + action
+  menu + read-only masked view; source ships in all editions
+- Fix: `.env` and other dotfiles were unaddressable in file review commands
+
 # 0.9.8 (2026-07-28)
 
 - Instant masked views: scans/syncs persist masked content; mask-text and the
