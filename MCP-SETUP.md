@@ -75,3 +75,49 @@ Add this to your IDE's MCP config (Cursor `~/.cursor/mcp.json`, Claude Desktop
 No `env` block is needed for local use. (Team/Enterprise only: add
 `"env": {"LOCALMASK_SERVER": "https://your-org-server", "LOCALMASK_ORG": "your-org"}`
 to sync policy and share the vault across the team.)
+
+---
+
+## Other editors
+
+### Cursor · Windsurf · VSCodium
+
+The VS Code extension works unchanged in every VS Code fork:
+
+```bash
+# Cursor
+cursor --install-extension localmask-key-toggle-0.2.0.vsix
+# Windsurf
+windsurf --install-extension localmask-key-toggle-0.2.0.vsix
+# VSCodium (also finds it on OpenVSX: search "LocalMask")
+codium --install-extension localmask-key-toggle-0.2.0.vsix
+```
+
+The MCP side is registered automatically by `localmask mcp-install`
+(Cursor uses `~/.cursor/mcp.json`).
+
+### Zed
+
+Zed speaks MCP natively — no extension needed. Add to `~/.config/zed/settings.json`:
+
+```json
+{
+  "context_servers": {
+    "localmask": {
+      "command": {
+        "path": "~/.localmask/venv/bin/python3",
+        "args": ["~/.localmask/mcp_server.py"]
+      }
+    }
+  }
+}
+```
+
+Then ask the assistant: *"Scan this repo for secrets"* — same tools, same
+local-only guarantee.
+
+### JetBrains (PyCharm, IntelliJ, DataGrip…)
+
+Native plugin in progress. Meanwhile the CLI covers the whole flow
+(`localmask scan / review / decide / publish`), and AI Assistant builds with
+MCP support can use the same manual config as above.

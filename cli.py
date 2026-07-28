@@ -22,6 +22,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.request
 import urllib.error
@@ -1712,6 +1713,24 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
     appf_p.add_argument("--scan", default="",
                         help="Scan ID (default: latest scan of this repo)")
 
+    # decide — non-interactive single decision, addressed by file+line (what
+    # an editor naturally knows) or det_id (machine use). Drives IDE
+    # quick-fixes / right-click review. 100% local.
+    dec_p = sub.add_parser(
+        "decide",
+        help="Approve/reject detections by file+line (non-interactive)")
+    dec_p.add_argument("verdict", choices=["approved", "rejected"])
+    dec_p.add_argument("--file", default="",
+                       help="Repo-relative path, e.g. etl/load_dwh.py")
+    dec_p.add_argument("--line", type=int, default=0,
+                       help="Line number (omit = whole file)")
+    dec_p.add_argument("--det", default="",
+                       help="Detection id (machine use; alternative to --file)")
+    dec_p.add_argument("--reason", default="",
+                       help="Why (rejections: recorded, feeds learning)")
+    dec_p.add_argument("--scan", default="",
+                       help="Scan ID (default: latest scan of this repo)")
+
     # grant-ai — give an AI its own read-only access to the masked mirror
     grant_p = sub.add_parser(
         "grant-ai",
@@ -1760,6 +1779,10 @@ Feedback / bug reports: feedback@localmaskpro.com  (or: localmask feedback)
                          help="The exact secret value the scanner missed")
     teach_p.add_argument("--subtype", "-s", default="SECRET",
                          help="Token type/name for the masked value (e.g. API_KEY)")
+    teach_p.add_argument("--stdin", action="store_true",
+                         help="Read the value from stdin instead of argv — "
+                              "keeps it out of `ps`/shell history (used by "
+                              "the IDE extension's right-click teach)")
     teach_p.add_argument("--allow", action="store_true",
                         help="Instead of masking, mark this value as a false "
                              "positive (never mask it)")
@@ -2233,7 +2256,7 @@ Full details: FINANCE.md""")
                   f"pass --scan <scan_id>.")
             return
         decision = "rejected" if args.command == "reject-file" else "approved"
-        norm = args.file.replace("\\", "/").lstrip("./")
+        norm = re.sub(r"^(\./)+", "", args.file.replace("\\", "/"))
         hits = [d for d in scan.get("detections", [])
                 if d.get("file", "").replace("\\", "/") == norm
                 or norm in (d.get("files") or [])]
@@ -2250,6 +2273,9 @@ Full details: FINANCE.md""")
             # lexicon as allowed. Re-scans (sync/publish) are not fully
             # deterministic (LLM gate), so carrying decisions by value can
             # lose rejections — the lexicon survives every re-scan.
+            # FILE-SCOPED: this is a whole-file decision, so the allow applies
+            # only inside this file — the same value anywhere else in the repo
+            # stays masked (fail-safe = mask).
             try:
                 from localmask.vault_store import get_vault_store, repo_id_for
                 store = get_vault_store(repo_id_for(scan.get("repo_url", "")))
@@ -2258,10 +2284,12 @@ Full details: FINANCE.md""")
                     v = d.get("value")
                     if v:
                         store.set_lexicon(v, action="allow",
-                                          subtype=d.get("type", ""))
+                                          subtype=d.get("type", ""),
+                                          scope_file=norm)
                         n_lex += 1
                 print(f"  {DIM}Persisted {n_lex} value(s) to the repo lexicon "
-                      f"— they stay unmasked across every future scan.{RESET}")
+                      f"(scoped to {norm}) — unmasked there on every future "
+                      f"scan, still masked elsewhere.{RESET}")
             except Exception:
                 pass
         verb = "Rejected" if decision == "rejected" else "Approved"
@@ -2283,6 +2311,75 @@ Full details: FINANCE.md""")
                           f"line {d.get('line')}  conf {d.get('confidence'):.0%}")
                 print(f"  {DIM}Re-approve one: localmask review {scan_id} "
                       f"(terminal, local){RESET}")
+        pend = sum(1 for d in scan.get("detections", [])
+                   if d.get("decision") in (None, "pending"))
+        print(f"  {DIM}Pending overall:{RESET} {pend}")
+        return
+
+    # ── decide — non-interactive approve/reject, file+line addressed ────────
+    # The primitive behind editor quick-fixes and right-click review. 100%
+    # local, zero AI involved.
+    if args.command == "decide":
+        from server_core import _get_or_load_scan
+        from localmask.state import SCANS, _load_persisted_scans
+        scan_id = args.scan
+        if not scan_id:
+            _load_persisted_scans()
+            best_t = ""
+            for sid, sc in SCANS.items():
+                repo = sc.get("repo_url", "")
+                try:
+                    if repo and os.path.isdir(repo) \
+                            and os.path.samefile(repo, os.getcwd()) \
+                            and sc.get("created_at", "") > best_t:
+                        scan_id, best_t = sid, sc.get("created_at", "")
+                except OSError:
+                    continue
+        scan = _get_or_load_scan(scan_id) if scan_id else None
+        if not scan:
+            print(f"  {RED}✗ No scan found.{RESET} Run from the repo root, or "
+                  f"pass --scan <scan_id>.")
+            return
+        if not args.det and not args.file:
+            print(f"  {RED}✗ Address the detection: --file <path> [--line N], "
+                  f"or --det <det_id>.{RESET}")
+            return
+        norm = re.sub(r"^(\./)+", "", args.file.replace("\\", "/")) if args.file else ""
+        hits = []
+        for d in scan.get("detections", []):
+            if args.det:
+                if d.get("det_id") == args.det:
+                    hits.append(d)
+            elif d.get("file", "").replace("\\", "/") == norm \
+                    or norm in (d.get("files") or []):
+                if not args.line or int(d.get("line", 0)) == args.line:
+                    hits.append(d)
+        if not hits:
+            where = args.det or (norm + (f":{args.line}" if args.line else ""))
+            print(f"  {YELLOW}No detections match '{where}'.{RESET}")
+            return
+        if args.reason:
+            for d in hits:
+                d["decision_reason"] = args.reason
+        # Whole-file decision (no line/det) → file-scoped lexicon allows;
+        # line/det decision → explicit token decision, repo-global allow.
+        whole_file = bool(norm) and not args.line and not args.det
+        eng = _local_engine()
+        eng.review_detections(
+            scan_id, {d["det_id"]: args.verdict for d in hits},
+            scope_file=norm if whole_file else "")
+        verb = "Rejected" if args.verdict == "rejected" else "Approved"
+        where = norm + (f" line {args.line}" if args.line else "") \
+            if norm else args.det
+        print(f"  {GREEN}✓ {verb} {len(hits)} detection(s){RESET} "
+              f"{BOLD}{where}{RESET} {DIM}({scan_id}){RESET}")
+        if args.verdict == "rejected":
+            scope = f"only in {norm}" if whole_file else "repo-wide"
+            print(f"  {DIM}Value(s) stay readable ({scope}) on every future "
+                  f"scan; still masked elsewhere.{RESET}"
+                  if whole_file else
+                  f"  {DIM}Value(s) allow-listed for this repo — every future "
+                  f"scan keeps them readable.{RESET}")
         pend = sum(1 for d in scan.get("detections", [])
                    if d.get("decision") in (None, "pending"))
         print(f"  {DIM}Pending overall:{RESET} {pend}")
@@ -2789,10 +2886,24 @@ Full details: FINANCE.md""")
     elif args.command == "teach":
         scan_id = args.scan_id
         value = args.value
-        if not value:
-            # `teach <value>` form — the positional we got is the value;
-            # resolve the current repo's latest scan from cwd.
-            value = scan_id
+        if getattr(args, "stdin", False):
+            # Value arrives on stdin (IDE right-click teach): never in argv,
+            # never in shell history, never near any AI.
+            value = sys.stdin.read().strip("\n\r")
+            if not value:
+                print(f"  {RED}✗ No value on stdin.{RESET}")
+                return
+            if scan_id == "-":
+                scan_id = ""   # sentinel: resolve latest scan below
+            _needs_resolve = not scan_id
+        else:
+            _needs_resolve = not value
+        if _needs_resolve:
+            # `teach <value>` form — the positional we got is the value
+            # (unless stdin already supplied it); resolve the current repo's
+            # latest scan from cwd.
+            if not getattr(args, "stdin", False):
+                value = scan_id
             from localmask.state import SCANS, _load_persisted_scans
             _load_persisted_scans()
             scan_id, best_t = "", ""

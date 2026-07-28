@@ -1178,6 +1178,10 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
 
     # ── Filter & dedupe ──────────────────────────────────────────────────
     allowed = session.get("allowed", set())
+    # File-scoped allows: rejections made as a whole-FILE decision apply only
+    # inside that file — the same value elsewhere in the repo stays masked.
+    _allowed_here = session.get("allowed_by_file", {}).get(
+        re.sub(r"^(\./)+", "", rel_path.replace("\\", "/")), set())
     # Patterns that are more specific get higher priority in dedup
     _SPECIFIC_PATTERNS = {
         "jwt_secret", "jwt_secret_var", "aws_access_key", "aws_secret_key",
@@ -1210,7 +1214,7 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         if len(v) < 3:
             continue
         d["entity"] = v
-        if v in allowed:
+        if v in allowed or v in _allowed_here:
             continue
         # Unresolved templates are placeholders, not real values — e.g.
         # postgresql://{{ db_user }}:{{ db_password }}@host or ${DB_PASS}.
@@ -1289,7 +1293,13 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # the key-position guard in _context_aware_replace would wrongly
         # protect them (leaving the token absent → finding silently dropped).
         # They're verified secrets — mask directly, like DIRECT_MASK patterns.
+        # USER-TAUGHT values are an explicit decision — "this exact string is
+        # secret". They must mask EVERYWHERE, including name="…"/key positions
+        # the guard normally protects (found: teaching a value that appears in
+        # an XML name attribute silently did nothing — guard protected it,
+        # then the token-absent check dropped the finding).
         if det.get("type", "") in RegexRulesSafe.DIRECT_MASK \
+                or det.get("pattern_reason", "") == "user_taught" \
                 or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key",
                                            "private_key_header"):
             # Direct mask skips the key-position guard but still must respect

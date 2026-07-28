@@ -12,6 +12,7 @@ Or configure in Claude Desktop's settings as an MCP server.
 """
 import json
 import os
+import re
 import sys
 
 # Ensure project root is on path
@@ -343,7 +344,7 @@ def bulk_review(
         res = _safe(engine.get_detections, scan_id)
         if "error" in res:
             return json.dumps(res, indent=2)
-        norm = file.replace("\\", "/").lstrip("./")
+        norm = re.sub(r"^(\./)+", "", file.replace("\\", "/"))
         dec_dict = {d["det_id"]: decision
                     for d in res.get("detections", [])
                     if d.get("file", "").replace("\\", "/") == norm
@@ -355,7 +356,13 @@ def bulk_review(
             dec_dict = json.loads(decisions)
         except json.JSONDecodeError:
             return json.dumps({"error": "decisions must be valid JSON"})
-    result = _safe(engine.review_detections, scan_id, dec_dict)
+    # File-form decisions are whole-file: rejections get file-scoped lexicon
+    # allows (same value elsewhere in the repo stays masked).
+    if file:
+        result = _safe(engine.review_detections, scan_id, dec_dict,
+                       scope_file=norm)
+    else:
+        result = _safe(engine.review_detections, scan_id, dec_dict)
     if isinstance(result, dict) and file:
         result["file"] = file
         result["applied"] = len(dec_dict)

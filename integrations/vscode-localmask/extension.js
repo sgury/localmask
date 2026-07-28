@@ -22,6 +22,15 @@ function findScanId(fileUri) {
   if (cfg) return cfg;
   const folder = vscode.workspace.getWorkspaceFolder(fileUri);
   if (!folder) return "";
+  // LATEST scan first: chat/MCP/CLI actions always target the repo's newest
+  // scan, so the UI must follow it — a scan id burned into an old git hook
+  // otherwise leaves the tree/masked view showing stale data.
+  try {
+    const out = cp.execFileSync(cliPath(), ["scan-id", folder.uri.fsPath],
+      { timeout: 10000 }).toString().trim();
+    const id = out.split("\n").reverse().find((l) => l.startsWith("scan_"));
+    if (id) return id;
+  } catch (e) { /* CLI unavailable — fall back to the hook comment */ }
   for (const hook of ["post-commit", "pre-push"]) {
     const hookPath = path.join(folder.uri.fsPath, ".git", "hooks", hook);
     try {
@@ -29,12 +38,7 @@ function findScanId(fileUri) {
       if (m) return m[1];
     } catch (e) { /* no hook — keep looking */ }
   }
-  try {
-    return cp.execFileSync(cliPath(), ["scan-id", folder.uri.fsPath],
-      { timeout: 10000 }).toString().trim();
-  } catch (e) {
-    return "";
-  }
+  return "";
 }
 
 function maskFile(scanId, filePath) {
@@ -111,6 +115,8 @@ function activate(context) {
   }
 
   function updateStatus() {
+    if (vscode.workspace.getConfiguration("localmask")
+        .get("showStatusBarKey") === false) { status.hide(); return; }
     const uri = activeFileUri();
     if (!uri) { status.hide(); return; }
     if (uri.scheme === SCHEME) {
@@ -396,6 +402,16 @@ function activate(context) {
             value: "SECRET",
           });
           if (!subtype) return;
+          // Remember the category — same as the right-click teach picker.
+          try {
+            const cfgLm = vscode.workspace.getConfiguration("localmask");
+            const known = cfgLm.get("teachTypes") || [];
+            const norm = subtype.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+            if (norm && norm !== "SECRET" && !known.includes(norm)) {
+              await cfgLm.update("teachTypes", [...known, norm],
+                vscode.ConfigurationTarget.Global);
+            }
+          } catch (e) { /* non-fatal */ }
           const out = await runQuick(["teach", scanId, value, "--subtype", subtype],
             root, "🛡 LocalMask — teaching (local re-scan)…");
           const ok = out.match(/✓ Found[^\n]*/);
@@ -421,6 +437,549 @@ function activate(context) {
 
   // Show the current stage as soon as the window opens.
   refreshShield();
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  In-editor review pack: detection model → diagnostics, quick fixes,
+  //  decorations, real-vs-masked diff, on-save sync.
+  //  STABILITY RULE: everything below is defensive — any failure logs to
+  //  the output channel and degrades silently; it must never break the IDE.
+  // ═══════════════════════════════════════════════════════════════════
+  const logChan = vscode.window.createOutputChannel("LocalMask");
+  context.subscriptions.push(logChan);
+  const logErr = (where, e) => {
+    try { logChan.appendLine(`[${where}] ${(e && e.stack) || e}`); } catch (_) {}
+  };
+
+  const workRoot = () => {
+    const f = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    return f ? f.uri.fsPath : "";
+  };
+  const relOf = (fsPath) => {
+    const root = workRoot();
+    if (!root) return "";
+    const r = path.relative(root, fsPath);
+    return r.startsWith("..") ? "" : r.split(path.sep).join("/");
+  };
+
+  // ── Detection model: one loader + one change event ────────────────
+  const model = {
+    scanId: "",
+    byFile: new Map(),        // rel path -> [detections]
+    total: 0, pending: 0,
+    changed: new vscode.EventEmitter(),
+    _resolvedAt: 0,
+  };
+  context.subscriptions.push(model.changed);
+
+  function loadModel() {
+    try {
+      const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+      if (!folder) return;
+      // findScanId can shell out — cache the resolution for 15s.
+      const now = Date.now();
+      if (!model.scanId || now - model._resolvedAt > 15000) {
+        model.scanId = findScanId(folder.uri) || "";
+        model._resolvedAt = now;
+      }
+      const byFile = new Map();
+      let total = 0, pending = 0;
+      if (model.scanId) {
+        const p = path.join(os.homedir(), ".localmask", "scans", model.scanId + ".json");
+        const d = JSON.parse(fs.readFileSync(p, "utf8"));
+        for (const det of d.detections || []) {
+          total++;
+          if (!det.decision || det.decision === "pending") pending++;
+          const files = det.files && det.files.length ? det.files : [det.file];
+          for (const f of files) {
+            if (!f) continue;
+            const norm = String(f).replace(/\\/g, "/").replace(/^\.\//, "");
+            if (!byFile.has(norm)) byFile.set(norm, []);
+            byFile.get(norm).push(det);
+          }
+        }
+      }
+      model.byFile = byFile;
+      model.total = total;
+      model.pending = pending;
+      model.changed.fire();
+    } catch (e) {
+      // Missing/corrupt scan JSON = "no scan" — never an error surface.
+      model.byFile = new Map(); model.total = 0; model.pending = 0;
+      model.changed.fire();
+      logErr("loadModel", e);
+    }
+  }
+
+  // Watch the scans dir (files are atomically replaced — watch the folder,
+  // not the file) with a debounce; re-arm quietly if the dir vanishes.
+  try {
+    const scansDir = path.join(os.homedir(), ".localmask", "scans");
+    let t = null;
+    if (fs.existsSync(scansDir)) {
+      const w = fs.watch(scansDir, () => {
+        clearTimeout(t);
+        t = setTimeout(() => { loadModel(); refreshShield(); }, 300);
+      });
+      w.on("error", (e) => logErr("fs.watch", e));
+      context.subscriptions.push({ dispose: () => { try { w.close(); } catch (_) {} } });
+    }
+  } catch (e) { logErr("watch-setup", e); }
+
+  // ── Diagnostics: pending detections in the Problems panel ─────────
+  const MAX_FILE_DETS = 2000;   // stability cap — huge data files opt out
+  const diags = vscode.languages.createDiagnosticCollection("localmask");
+  context.subscriptions.push(diags);
+
+  const featureOn = (key) =>
+    vscode.workspace.getConfiguration("localmask").get(key) !== false;
+
+  function refreshDiagnostics() {
+    try {
+      diags.clear();
+      if (!featureOn("problemsPanel")) return;   // user opted out in settings
+      const root = workRoot();
+      if (!root) return;
+      for (const [rel, dets] of model.byFile) {
+        if (dets.length > MAX_FILE_DETS) continue;
+        const list = [];
+        for (const d of dets) {
+          if (d.decision && d.decision !== "pending") continue;
+          const line = Math.max(0, (d.line || 1) - 1);
+          const v = String(d.value || "");
+          const shortV = v.length > 24 ? v.slice(0, 21) + "…" : v;
+          const diag = new vscode.Diagnostic(
+            new vscode.Range(line, 0, line, 400),
+            `LocalMask: ${d.type}` + (shortV ? ` "${shortV}"` : "") +
+              ` → will be masked as ${d.token || "~[…]~"}`,
+            vscode.DiagnosticSeverity.Warning);
+          diag.source = "LocalMask";
+          diag.code = d.det_id || "";
+          list.push(diag);
+        }
+        if (list.length)
+          diags.set(vscode.Uri.file(path.join(root, rel)), list);
+      }
+    } catch (e) { logErr("diagnostics", e); }
+  }
+
+  // ── Decorations: review state at a glance in the real file ────────
+  const decoPending = vscode.window.createTextEditorDecorationType({
+    backgroundColor: "rgba(255, 200, 60, 0.10)",
+    overviewRulerColor: "rgba(255, 200, 60, 0.8)",
+    overviewRulerLane: vscode.OverviewRulerLane.Right,
+  });
+  const decoApproved = vscode.window.createTextEditorDecorationType({
+    backgroundColor: "rgba(80, 200, 120, 0.07)",
+    after: { contentText: "  🛡 masked", color: "rgba(120,200,150,0.55)" },
+  });
+  const decoRejected = vscode.window.createTextEditorDecorationType({
+    after: { contentText: "  ○ kept readable", color: "rgba(160,160,160,0.5)" },
+  });
+  context.subscriptions.push(decoPending, decoApproved, decoRejected);
+
+  function refreshDecorations() {
+    try {
+      const on = featureOn("inlineHighlights");   // user opt-out in settings
+      for (const ed of vscode.window.visibleTextEditors) {
+        if (ed.document.uri.scheme !== "file") continue;
+        if (!on) {
+          ed.setDecorations(decoPending, []);
+          ed.setDecorations(decoApproved, []);
+          ed.setDecorations(decoRejected, []);
+          continue;
+        }
+        const rel = relOf(ed.document.uri.fsPath);
+        const dets = (rel && model.byFile.get(rel)) || [];
+        if (dets.length > MAX_FILE_DETS || ed.document.lineCount > 100000) {
+          ed.setDecorations(decoPending, []);
+          ed.setDecorations(decoApproved, []);
+          ed.setDecorations(decoRejected, []);
+          continue;
+        }
+        const buckets = { pending: [], approved: [], rejected: [] };
+        for (const d of dets) {
+          const line = Math.max(0, Math.min((d.line || 1) - 1, ed.document.lineCount - 1));
+          const range = ed.document.lineAt(line).range;
+          const state = !d.decision || d.decision === "pending" ? "pending" : d.decision;
+          (buckets[state] || buckets.pending).push({
+            range,
+            hoverMessage: `LocalMask ${state}: ${d.type} — the AI sees ${d.token || "~[…]~"}`,
+          });
+        }
+        ed.setDecorations(decoPending, buckets.pending);
+        ed.setDecorations(decoApproved, buckets.approved);
+        ed.setDecorations(decoRejected, buckets.rejected);
+      }
+    } catch (e) { logErr("decorations", e); }
+  }
+
+  // ── decide: the local primitive behind quick fixes ────────────────
+  function decide(verdict, rel, line, reason) {
+    return new Promise((resolve) => {
+      const args = ["decide", verdict, "--file", rel];
+      if (line) args.push("--line", String(line));
+      if (reason) args.push("--reason", reason);
+      if (model.scanId) args.push("--scan", model.scanId);
+      cp.execFile(cliPath(), args, { cwd: workRoot(), timeout: 30000 },
+        (err, stdout, stderr) => {
+          if (err) { logErr("decide", stderr || err); resolve(false); return; }
+          resolve(true);
+        });
+    });
+  }
+
+  async function decideAndRefresh(verdict, fileUri, line, reason) {
+    const rel = relOf(fileUri.fsPath);
+    if (!rel) return;
+    const ok = await decide(verdict, rel, line, reason);
+    if (!ok) {
+      vscode.window.showWarningMessage(
+        "LocalMask: could not record the decision — see the LocalMask output log.");
+      return;
+    }
+    loadModel();
+    refreshShield();
+    emitter.fire(maskedUri(fileUri));   // live masked views update instantly
+    vscode.window.setStatusBarMessage(
+      verdict === "approved" ? "🛡 LocalMask: masking approved"
+        : "🛡 LocalMask: rejected — value stays readable", 4000);
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("localmask.approveLine", (uri, line) =>
+      decideAndRefresh("approved", uri, line).catch((e) => logErr("approveLine", e))),
+    vscode.commands.registerCommand("localmask.rejectLine", async (uri, line) => {
+      try {
+        const reason = await vscode.window.showInputBox({
+          prompt: "Why is this a false positive? (recorded locally — the model learns from it)",
+          placeHolder: "e.g. synthetic demo data",
+        });
+        if (reason === undefined) return;   // Esc = cancel
+        await decideAndRefresh("rejected", uri, line, reason || "");
+      } catch (e) { logErr("rejectLine", e); }
+    }));
+
+  // ── Quick fixes on the diagnostics ────────────────────────────────
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider({ scheme: "file" }, {
+      provideCodeActions(doc, range, ctx) {
+        try {
+          const mine = (ctx.diagnostics || []).filter((d) => d.source === "LocalMask");
+          if (!mine.length) return [];
+          const line = range.start.line + 1;
+          const approve = new vscode.CodeAction(
+            "🛡 Approve masking here", vscode.CodeActionKind.QuickFix);
+          approve.command = { command: "localmask.approveLine",
+            title: "approve", arguments: [doc.uri, line] };
+          approve.diagnostics = mine;
+          approve.isPreferred = true;
+          const reject = new vscode.CodeAction(
+            "🛡 Reject — false positive (stays readable)", vscode.CodeActionKind.QuickFix);
+          reject.command = { command: "localmask.rejectLine",
+            title: "reject", arguments: [doc.uri, line] };
+          reject.diagnostics = mine;
+          return [approve, reject];
+        } catch (e) { logErr("codeActions", e); return []; }
+      },
+    }, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
+
+  // ── Side-by-side: real vs masked ──────────────────────────────────
+  context.subscriptions.push(
+    vscode.commands.registerCommand("localmask.compare", async () => {
+      try {
+        const uri = activeFileUri();
+        if (!uri) return;
+        const real = uri.scheme === SCHEME ? vscode.Uri.file(realPathOf(uri)) : uri;
+        if (real.scheme !== "file") return;
+        await vscode.commands.executeCommand("vscode.diff",
+          real, maskedUri(real),
+          `${path.basename(real.fsPath)} — real ⇄ masked (what the AI sees)`);
+      } catch (e) { logErr("compare", e); }
+    }));
+
+  // ── On-save sync: masked store follows your edits ─────────────────
+  let saveTimer = null, syncing = false;
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      try {
+        if (doc.uri.scheme !== "file" || !relOf(doc.uri.fsPath)) return;
+        if (!vscode.workspace.getConfiguration("localmask").get("syncOnSave")) return;
+        if (!model.scanId) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          if (syncing) return;
+          syncing = true;
+          cp.execFile(cliPath(), ["sync", model.scanId],
+            { cwd: workRoot(), timeout: 120000, maxBuffer: 8 * 1024 * 1024 },
+            (err) => {
+              syncing = false;
+              if (err) { logErr("syncOnSave", err); return; }
+              loadModel();
+              refreshShield();
+            });
+        }, 2000);
+      } catch (e) { logErr("onSave", e); }
+    }));
+
+  // Wire refreshes: model change → diagnostics + decorations; editors change
+  // → decorations only.
+  // ── Sidebar review tree: file → detections, ✓/✗ inline ────────────
+  const stateOf = (d) => (!d.decision || d.decision === "pending")
+    ? "pending" : d.decision;
+  const stateIcon = {
+    pending: new vscode.ThemeIcon("circle-large-outline",
+      new vscode.ThemeColor("editorWarning.foreground")),
+    approved: new vscode.ThemeIcon("pass",
+      new vscode.ThemeColor("testing.iconPassed")),
+    rejected: new vscode.ThemeIcon("circle-slash"),
+  };
+
+  const tree = {
+    _em: new vscode.EventEmitter(),
+    get onDidChangeTreeData() { return this._em.event; },
+    getChildren(node) {
+      try {
+        if (!node) {
+          return [...model.byFile.entries()]
+            .sort((a, b) => b[1].length - a[1].length)
+            .map(([rel, dets]) => ({ kind: "file", rel, dets }));
+        }
+        if (node.kind === "file") {
+          return node.dets
+            .slice()
+            .sort((a, b) => (a.line || 0) - (b.line || 0))
+            .map((d) => ({ kind: "det", rel: node.rel, det: d }));
+        }
+        return [];
+      } catch (e) { logErr("tree.children", e); return []; }
+    },
+    getTreeItem(node) {
+      try {
+        const root = workRoot();
+        if (node.kind === "file") {
+          const pend = node.dets.filter((d) => stateOf(d) === "pending").length;
+          const it = new vscode.TreeItem(node.rel,
+            vscode.TreeItemCollapsibleState.Collapsed);
+          it.description = pend ? `${pend} pending · ${node.dets.length} total`
+            : `all decided · ${node.dets.length}`;
+          it.iconPath = vscode.ThemeIcon.File;
+          it.resourceUri = vscode.Uri.file(path.join(root, node.rel));
+          it.contextValue = "lmFile";
+          return it;
+        }
+        const d = node.det;
+        const st = stateOf(d);
+        // Show the REAL value in the tree — this is the user's own screen,
+        // exactly like the terminal reviewer; nothing here reaches any AI.
+        const val = String(d.value || "");
+        const short = val.length > 30 ? val.slice(0, 27) + "…" : val;
+        const it = new vscode.TreeItem(short || `L${d.line || "?"}`);
+        it.description = `${d.type} · L${d.line || "?"}` +
+          (st === "pending" ? "" : ` · ${st === "approved" ? "masked" : "kept readable"}`);
+        it.tooltip = `"${val}"\n${d.type} — ${st}\n` +
+          `the AI sees: ${d.token || "~[…]~"}\nclick to jump to it in the file`;
+        it.iconPath = stateIcon[st] || stateIcon.pending;
+        it.contextValue = "lmDet-" + st;
+        it.command = {
+          command: "localmask.openDet", title: "open",
+          arguments: [node],
+        };
+        return it;
+      } catch (e) { logErr("tree.item", e); return new vscode.TreeItem("…"); }
+    },
+  };
+  const treeView = vscode.window.createTreeView("localmaskReview",
+    { treeDataProvider: tree });
+  context.subscriptions.push(treeView);
+
+  function refreshTreeBadge() {
+    try {
+      treeView.badge = model.pending
+        ? { value: model.pending, tooltip: `${model.pending} detections pending review` }
+        : undefined;
+    } catch (e) { logErr("badge", e); }
+  }
+
+  const nodeFileUri = (node) =>
+    vscode.Uri.file(path.join(workRoot(), node.rel));
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("localmask.refreshTree", () => {
+      model.scanId = ""; model._resolvedAt = 0;   // force fresh resolution
+      loadModel();
+    }),
+    // Open the file and SELECT the exact value on its line, so what's being
+    // masked is unmistakable even with many findings around.
+    vscode.commands.registerCommand("localmask.openDet", async (node) => {
+      try {
+        if (!node || !node.det) return;
+        const d = node.det;
+        const doc = await vscode.workspace.openTextDocument(nodeFileUri(node));
+        const ed = await vscode.window.showTextDocument(doc, { preview: true });
+        const lineNo = Math.max(0, Math.min((d.line || 1) - 1, doc.lineCount - 1));
+        const text = doc.lineAt(lineNo).text;
+        const val = String(d.value || "");
+        let range;
+        const col = val ? text.indexOf(val) : -1;
+        if (col >= 0) {
+          range = new vscode.Range(lineNo, col, lineNo, col + val.length);
+        } else {
+          // value not on that exact line (moved since scan) — try whole doc
+          const idx = val ? doc.getText().indexOf(val) : -1;
+          range = idx >= 0
+            ? new vscode.Range(doc.positionAt(idx), doc.positionAt(idx + val.length))
+            : doc.lineAt(lineNo).range;
+        }
+        ed.selection = new vscode.Selection(range.start, range.end);
+        ed.revealRange(range, vscode.TextEditorRevealType.InCenter);
+      } catch (e) { logErr("openDet", e); }
+    }),
+    vscode.commands.registerCommand("localmask.approveDet", (node) =>
+      node && node.det && decideAndRefresh("approved", nodeFileUri(node), node.det.line)
+        .catch((e) => logErr("approveDet", e))),
+    vscode.commands.registerCommand("localmask.rejectDet", (node) =>
+      node && node.det && vscode.commands.executeCommand(
+        "localmask.rejectLine", nodeFileUri(node), node.det.line)),
+    vscode.commands.registerCommand("localmask.approveFileNode", (node) =>
+      node && decideAndRefresh("approved", nodeFileUri(node), 0)
+        .catch((e) => logErr("approveFileNode", e))),
+    vscode.commands.registerCommand("localmask.rejectFileNode", async (node) => {
+      try {
+        if (!node) return;
+        const ok = await vscode.window.showWarningMessage(
+          `Reject ALL detections in ${node.rel}? Every value there stays ` +
+          "readable in the mirror (only in this file — the same values stay " +
+          "masked elsewhere).", { modal: true }, "Reject file");
+        if (ok === "Reject file")
+          await decideAndRefresh("rejected", nodeFileUri(node), 0, "file review");
+      } catch (e) { logErr("rejectFileNode", e); }
+    }));
+
+  // ── Right-click: approve/reject at cursor, teach by marking ───────
+  /** The real file uri behind whatever editor is focused — the file itself,
+   *  or the real path of a masked (diff) view. Null if neither. */
+  function realFileUriOf(ed) {
+    if (!ed) return null;
+    const u = ed.document.uri;
+    if (u.scheme === "file") return u;
+    if (u.scheme === SCHEME) return vscode.Uri.file(realPathOf(u));
+    return null;
+  }
+
+  context.subscriptions.push(
+    // Works from the real file AND from the masked side of the diff view —
+    // masked docs map back to their real file (same lines: tokens replace
+    // values in place).
+    vscode.commands.registerCommand("localmask.approveHere", () => {
+      const ed = vscode.window.activeTextEditor;
+      const uri = realFileUriOf(ed);
+      if (!uri) return;
+      return decideAndRefresh("approved", uri,
+        ed.selection.active.line + 1).catch((e) => logErr("approveHere", e));
+    }),
+    vscode.commands.registerCommand("localmask.rejectHere", () => {
+      const ed = vscode.window.activeTextEditor;
+      const uri = realFileUriOf(ed);
+      if (!uri) return;
+      return vscode.commands.executeCommand("localmask.rejectLine",
+        uri, ed.selection.active.line + 1);
+    }),
+    vscode.commands.registerCommand("localmask.teachSelection", async () => {
+      try {
+        const ed = vscode.window.activeTextEditor;
+        const fileUri = realFileUriOf(ed);
+        if (!fileUri) return;
+        const value = ed.document.getText(ed.selection).trim();
+        if (!value) {
+          vscode.window.showInformationMessage(
+            "LocalMask: select the exact secret value first, then right-click → Mark as secret.");
+          return;
+        }
+        if (value.includes("~[")) {
+          vscode.window.showInformationMessage(
+            "LocalMask: that selection contains a masked token — it's already protected. " +
+            "Select the raw value (real view) to teach.");
+          return;
+        }
+        // User-defined categories (settings) first, then the built-ins.
+        const custom = vscode.workspace.getConfiguration("localmask")
+          .get("teachTypes") || [];
+        const builtins = ["SECRET", "API_KEY", "PASSWORD", "TOKEN",
+          "DATABASE_NAME", "PERSON_NAME", "EMAIL", "INTERNAL_URL"];
+        const types = [...new Set([...custom, ...builtins])];
+        const subtype = await vscode.window.showQuickPick(
+          [...types, "Custom…"],
+          { title: "🛡 Token type for this value (stays 100% local)" });
+        if (!subtype) return;
+        let st = subtype;
+        if (subtype === "Custom…") {
+          st = await vscode.window.showInputBox({ prompt: "Token type", value: "SECRET" });
+          if (!st) return;
+          st = st.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+          // Remember it: next time it's a first-class category in the picker.
+          if (!custom.includes(st) && !builtins.includes(st)) {
+            try {
+              await vscode.workspace.getConfiguration("localmask").update(
+                "teachTypes", [...custom, st],
+                vscode.ConfigurationTarget.Global);
+            } catch (err) { logErr("saveTeachType", err); }
+          }
+        }
+        // Value goes over STDIN — never argv (no `ps`/history leak), never
+        // anywhere near an AI.
+        await new Promise((resolve) => {
+          const child = cp.execFile(cliPath(),
+            ["teach", model.scanId || "-", "--stdin", "--subtype", st],
+            { cwd: workRoot(), timeout: 120000, maxBuffer: 8 * 1024 * 1024 },
+            (err, stdout, stderr) => {
+              if (err) {
+                logErr("teachSelection", stderr || err);
+                vscode.window.showWarningMessage(
+                  "LocalMask: teach failed — see the LocalMask output log.");
+              } else {
+                vscode.window.setStatusBarMessage(
+                  "🛡 LocalMask: taught — all occurrences will be masked", 4000);
+              }
+              resolve();
+            });
+          child.stdin.write(value);
+          child.stdin.end();
+        });
+        model.scanId = ""; model._resolvedAt = 0;   // teach may follow a newer scan
+        loadModel();
+        refreshShield();
+        emitter.fire(maskedUri(fileUri));
+      } catch (e) { logErr("teachSelection", e); }
+    }));
+
+  // ── Per-button visibility (user settings) ─────────────────────────
+  function applyVisibility() {
+    try {
+      if (featureOn("showStatusBarShield")) shield.show(); else shield.hide();
+      updateStatus();   // key item re-evaluates its own setting
+    } catch (e) { logErr("visibility", e); }
+  }
+
+  context.subscriptions.push(
+    model.changed.event(() => {
+      refreshDiagnostics();
+      refreshDecorations();
+      tree._em.fire();
+      refreshTreeBadge();
+    }),
+    vscode.window.onDidChangeVisibleTextEditors(() => refreshDecorations()),
+    // Settings changes apply immediately — no reload needed.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      try {
+        if (e.affectsConfiguration("localmask")) {
+          refreshDiagnostics();
+          refreshDecorations();
+          applyVisibility();
+        }
+      } catch (err) { logErr("configChange", err); }
+    }));
+  loadModel();
+  applyVisibility();
 
   // ── The key toggle ────────────────────────────────────────────────
   context.subscriptions.push(
@@ -475,6 +1034,12 @@ function activate(context) {
       await vscode.commands.executeCommand("vscode.open", newDoc.uri,
         { preview: false });
       log("vscode.open ok");
+      if (newDoc.uri.scheme === SCHEME) {
+        // VS Code keeps closed virtual docs cached for minutes — re-opening
+        // can serve pre-teach/pre-review content. Fire AFTER opening so the
+        // now-visible doc is re-queried and always shows the current store.
+        emitter.fire(newDoc.uri);
+      }
       const newEd = vscode.window.activeTextEditor;
       if (newEd && newEd.document.uri.toString() === newDoc.uri.toString()) {
         // keep the same spot in the file

@@ -22,6 +22,7 @@ import base64
 import hashlib
 import hmac
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -130,6 +131,15 @@ class SqliteVaultStore(_Crypto):
             self.db.execute("""CREATE TABLE IF NOT EXISTS lexicon (
                 repo_id TEXT, vhash TEXT, action TEXT, subtype TEXT,
                 enc BLOB, scheme TEXT, ts REAL, PRIMARY KEY (repo_id, vhash))""")
+            # File-scoped lexicon: decisions made on a whole FILE apply only
+            # inside that file. A rejected value in docs/runbook.md must NOT
+            # unmask the same value in config/settings.ini (fail-safe = mask).
+            # Separate table because the global lexicon's PK has no file column
+            # and the same value may be scoped to several files.
+            self.db.execute("""CREATE TABLE IF NOT EXISTS lexicon_scoped (
+                repo_id TEXT, vhash TEXT, scope_file TEXT, action TEXT,
+                subtype TEXT, enc BLOB, scheme TEXT, ts REAL,
+                PRIMARY KEY (repo_id, vhash, scope_file))""")
             self.db.commit()
             try:
                 os.chmod(db_path, 0o600)
@@ -204,16 +214,28 @@ class SqliteVaultStore(_Crypto):
 
     # ── User lexicon (taught / ignored values) ───────────────────────────────
     def set_lexicon(self, value: str, action: str = "mask",
-                    subtype: str = "SECRET"):
+                    subtype: str = "SECRET", scope_file: str = ""):
         """Persist a user-taught (action='mask') or ignored (action='allow')
-        value so it applies on every future scan/sync of this repo."""
+        value so it applies on every future scan/sync of this repo.
+
+        scope_file: when set, the entry applies ONLY inside that repo-relative
+        file (file-level review decision). Empty = repo-global (explicit
+        per-value decision or taught secret)."""
         if not self.enabled:
             return
         try:
-            self.db.execute(
-                "INSERT OR REPLACE INTO lexicon VALUES (?,?,?,?,?,?,?)",
-                (self.repo_id, self._vhash(value), action, subtype,
-                 self._encrypt(value), self.scheme, time.time()))
+            if scope_file:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO lexicon_scoped VALUES "
+                    "(?,?,?,?,?,?,?,?)",
+                    (self.repo_id, self._vhash(value),
+                     re.sub(r"^(\./)+", "", scope_file.replace("\\", "/")), action,
+                     subtype, self._encrypt(value), self.scheme, time.time()))
+            else:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO lexicon VALUES (?,?,?,?,?,?,?)",
+                    (self.repo_id, self._vhash(value), action, subtype,
+                     self._encrypt(value), self.scheme, time.time()))
             self.db.commit()
         except Exception:
             pass
@@ -224,6 +246,9 @@ class SqliteVaultStore(_Crypto):
         try:
             self.db.execute("DELETE FROM lexicon WHERE repo_id=? AND vhash=?",
                             (self.repo_id, self._vhash(value)))
+            self.db.execute(
+                "DELETE FROM lexicon_scoped WHERE repo_id=? AND vhash=?",
+                (self.repo_id, self._vhash(value)))
             self.db.commit()
         except Exception:
             pass
@@ -244,6 +269,16 @@ class SqliteVaultStore(_Crypto):
                 else:
                     session.setdefault("allowed", set()).add(value)
                     session.setdefault("taught", {}).pop(value, None)
+            # File-scoped entries: allowed only inside their own file.
+            # Global entries above always win over a scoped row for the
+            # same value ('mask' teaches stay effective everywhere).
+            for scope_file, action, subtype, enc, scheme in self.db.execute(
+                    "SELECT scope_file, action, subtype, enc, scheme "
+                    "FROM lexicon_scoped WHERE repo_id=?", (self.repo_id,)):
+                value = self._decrypt(enc, scheme)
+                if action == "allow":
+                    session.setdefault("allowed_by_file", {}) \
+                           .setdefault(scope_file, set()).add(value)
         except Exception as e:
             print(f"[vault_store] load_lexicon failed: {e}")
 

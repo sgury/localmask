@@ -477,8 +477,13 @@ class LocalMaskEngine:
     # ── Review & Workflow ────────────────────────────────────────────────────
 
     def review_detections(self, scan_id: str, decisions: dict,
-                          reviewer: str = "developer") -> dict:
-        """Submit detection-level decisions. decisions = {det_id: 'approved'|'rejected'}"""
+                          reviewer: str = "developer",
+                          scope_file: str = "") -> dict:
+        """Submit detection-level decisions. decisions = {det_id: 'approved'|'rejected'}
+
+        scope_file: set when the decisions represent a whole-FILE decision —
+        rejected values are then allow-listed only inside that file, not
+        repo-wide (fail-safe = mask)."""
         scan = _get_or_load_scan(scan_id)
         if not scan:
             raise KeyError(f"Scan not found: {scan_id}")
@@ -514,7 +519,8 @@ class LocalMaskEngine:
                 store = get_vault_store(repo_id_for(scan.get("repo_url", "")))
                 for d in rejected_vals:
                     store.set_lexicon(d["value"], action="allow",
-                                      subtype=d.get("type", ""))
+                                      subtype=d.get("type", ""),
+                                      scope_file=scope_file)
         except Exception:
             pass
         # Keep the 🔑 masked view in sync with the decisions just made

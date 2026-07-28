@@ -1,15 +1,16 @@
 {
   "name": "localmask-key-toggle",
-  "displayName": "LocalMask — Key Toggle",
-  "description": "One key to flip any file between real values and the masked view (~[TOKEN]~). 100% local — powered by the LocalMask CLI.",
-  "version": "0.1.0",
+  "displayName": "LocalMask",
+  "description": "Mask secrets & PII before any AI sees your code — 100% local. Key toggle real/masked view, in-editor review, teach-by-marking, masked mirror publish.",
+  "version": "0.2.0",
   "publisher": "localmask",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Linters"
   ],
   "main": "./extension.js",
   "activationEvents": [
@@ -26,8 +27,74 @@
         "command": "localmask.scan",
         "title": "LocalMask: Scan Repository for Secrets",
         "icon": "$(shield)"
+      },
+      {
+        "command": "localmask.compare",
+        "title": "LocalMask: Compare Real vs Masked (side by side)",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "localmask.refreshTree",
+        "title": "LocalMask: Refresh Review Tree",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "localmask.approveDet",
+        "title": "Approve masking",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "localmask.rejectDet",
+        "title": "Reject — false positive",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "localmask.approveFileNode",
+        "title": "Approve all in file",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "localmask.rejectFileNode",
+        "title": "Reject all in file (kept readable there only)",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "localmask.approveHere",
+        "title": "Approve masking on this line"
+      },
+      {
+        "command": "localmask.rejectHere",
+        "title": "Reject — false positive on this line"
+      },
+      {
+        "command": "localmask.teachSelection",
+        "title": "Mark selection as secret (teach — stays local)"
       }
     ],
+    "submenus": [
+      {
+        "id": "localmask.editorMenu",
+        "label": "🛡 LocalMask"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "localmask",
+          "title": "LocalMask",
+          "icon": "media/shield.svg"
+        }
+      ]
+    },
+    "views": {
+      "localmask": [
+        {
+          "id": "localmaskReview",
+          "name": "Review",
+          "when": "config.localmask.showReviewSidebar"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "localmask.toggle",
@@ -40,7 +107,78 @@
       "editor/title": [
         {
           "command": "localmask.toggle",
-          "group": "navigation"
+          "group": "navigation",
+          "when": "config.localmask.showToggleButton"
+        },
+        {
+          "command": "localmask.compare",
+          "group": "navigation",
+          "when": "config.localmask.showCompareButton"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "localmask.editorMenu",
+          "group": "1_modification@9",
+          "when": "config.localmask.showEditorMenu && (resourceScheme == file || resourceScheme == localmask-masked)"
+        }
+      ],
+      "localmask.editorMenu": [
+        {
+          "command": "localmask.teachSelection",
+          "group": "1_teach@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "localmask.approveHere",
+          "group": "2_decide@1"
+        },
+        {
+          "command": "localmask.rejectHere",
+          "group": "2_decide@2"
+        },
+        {
+          "command": "localmask.compare",
+          "group": "3_view@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "localmask.refreshTree",
+          "group": "navigation",
+          "when": "view == localmaskReview"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "localmask.approveDet",
+          "group": "inline@1",
+          "when": "view == localmaskReview && viewItem == lmDet-pending"
+        },
+        {
+          "command": "localmask.rejectDet",
+          "group": "inline@2",
+          "when": "view == localmaskReview && viewItem == lmDet-pending"
+        },
+        {
+          "command": "localmask.approveDet",
+          "group": "1_decide@1",
+          "when": "view == localmaskReview && viewItem =~ /^lmDet/"
+        },
+        {
+          "command": "localmask.rejectDet",
+          "group": "1_decide@2",
+          "when": "view == localmaskReview && viewItem =~ /^lmDet/"
+        },
+        {
+          "command": "localmask.approveFileNode",
+          "group": "inline@1",
+          "when": "view == localmaskReview && viewItem == lmFile"
+        },
+        {
+          "command": "localmask.rejectFileNode",
+          "group": "1_decide@1",
+          "when": "view == localmaskReview && viewItem == lmFile"
         }
       ]
     },
@@ -61,8 +199,81 @@
           "type": "string",
           "default": "",
           "description": "Scan ID whose token vault is used for masking. Leave empty to auto-detect from the repo's LocalMask git hook."
+        },
+        "localmask.syncOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Re-sync the scan (locally) after you save a file, so the masked store and mirror stay current. (opt-in)"
+        },
+        "localmask.problemsPanel": {
+          "type": "boolean",
+          "default": false,
+          "description": "List pending detections in the Problems panel, with lightbulb quick fixes (approve / reject). (opt-in)"
+        },
+        "localmask.inlineHighlights": {
+          "type": "boolean",
+          "default": false,
+          "description": "Highlight detected lines in the editor and show their review state (pending / masked / kept readable). (opt-in)"
+        },
+        "localmask.showStatusBarShield": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the 🛡 shield button (scan / actions menu) in the status bar."
+        },
+        "localmask.showStatusBarKey": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the 🔑 REAL/MASKED toggle button in the status bar."
+        },
+        "localmask.showToggleButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the 🔑 toggle button in the editor title bar."
+        },
+        "localmask.showCompareButton": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the ⇄ Compare Real vs Masked button in the editor title bar. (opt-in)"
+        },
+        "localmask.showEditorMenu": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the 🛡 LocalMask right-click menu in the editor (teach selection, approve/reject on line). (opt-in)"
+        },
+        "localmask.showReviewSidebar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the LocalMask review tree in the Activity Bar. (opt-in)"
+        },
+        "localmask.teachTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Your own token categories for teach (e.g. CUSTOMER_ID, IBAN). They appear at the top of the type picker; the token becomes ~[NAME_N]~."
         }
       }
     }
-  }
+  },
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sgury/localmask.git"
+  },
+  "homepage": "https://localmaskpro.com",
+  "bugs": {
+    "url": "https://github.com/sgury/localmask/issues"
+  },
+  "keywords": [
+    "secrets",
+    "security",
+    "privacy",
+    "PII",
+    "masking",
+    "AI",
+    "copilot",
+    "mcp",
+    "local"
+  ]
 }

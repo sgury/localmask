@@ -1,0 +1,30 @@
+<idea-plugin>
+    <id>com.localmask.jetbrains</id>
+    <name>LocalMask</name>
+    <vendor url="https://localmaskpro.com">LocalMask</vendor>
+    <description><![CDATA[
+        Mask secrets &amp; PII before any AI sees your code — 100% local.<br/>
+        🛡 status-bar shield: scan, approve, publish the masked mirror.<br/>
+        🔑 toggle a read-only masked view (what the AI sees).<br/>
+        Requires the free LocalMask CLI (localmaskpro.com).
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <statusBarWidgetFactory id="LocalMaskShield"
+                                implementation="com.localmask.ShieldWidgetFactory"/>
+        <notificationGroup id="LocalMask" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action id="LocalMask.ToggleMasked"
+                class="com.localmask.ToggleMaskedAction"
+                text="LocalMask: Show Masked View (What the AI Sees)"
+                description="Open a read-only locally-masked view of this file">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt K"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta alt K"/>
+        </action>
+    </actions>
+</idea-plugin>
