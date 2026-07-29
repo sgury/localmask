@@ -22,9 +22,10 @@ Requires Python 3.10+. No ML or cloud dependencies.
 
 VS Code: **Extensions → search "LocalMask" → Install** (publisher
 `localmask`), or `code --install-extension localmask.localmask-key-toggle`.
-Works unchanged in Cursor / Windsurf / VSCodium. JetBrains plugin source
-ships in every tarball under `integrations/jetbrains-localmask/`. If the CLI
-isn't installed yet, the extension offers a one-click guided install.
+Works unchanged in Cursor / Windsurf / VSCodium. JetBrains (PyCharm, IDEA,
+DataGrip): Settings → Plugins → search "LocalMask", or
+https://plugins.jetbrains.com/plugin/33216-localmask. If the CLI isn't
+installed yet, the extension offers a one-click guided install.
 
 ### Quickstart
 

@@ -1,6 +1,9 @@
-# LocalMask for JetBrains IDEs (MVP)
+# LocalMask for JetBrains IDEs
 
 PyCharm · IntelliJ IDEA · DataGrip · GoLand · WebStorm — platform APIs only.
+
+**Install from the marketplace**: Settings → Plugins → search "LocalMask",
+or https://plugins.jetbrains.com/plugin/33216-localmask
 
 - **🛡 status-bar shield** — findings + review stage; click for the action
   menu: scan/sync, approve all, publish masked mirror, review, commit hook.

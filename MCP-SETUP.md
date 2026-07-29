@@ -130,9 +130,12 @@ local-only guarantee.
 
 ### JetBrains (PyCharm, IntelliJ, DataGrip…)
 
-Native plugin in progress. Meanwhile the CLI covers the whole flow
-(`localmask scan / review / decide / publish`), and AI Assistant builds with
-MCP support can use the same manual config as above.
+Install from the marketplace: **Settings → Plugins → search "LocalMask"**, or
+https://plugins.jetbrains.com/plugin/33216-localmask — 🛡 status-bar shield
+(scan, approve, publish, review, hook) and a read-only masked view
+(`Cmd/Ctrl+Alt+K`). Works in any 2023.3+ IDE. The CLI covers the rest of the
+flow (`localmask scan / review / decide / publish`), and AI Assistant builds
+with MCP support can use the same manual config as above.
 
 ---
 
