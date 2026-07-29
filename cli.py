@@ -1584,6 +1584,17 @@ def cmd_init(args):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
+    # --version: machine-readable "<version> <edition>" — the IDE extensions
+    # probe this at startup to detect an out-of-date CLI (older CLIs exit
+    # non-zero on the unknown flag, which is itself the "too old" signal).
+    if "--version" in sys.argv[1:2]:
+        try:
+            from localmask._edition import VERSION, EDITION
+            print(f"{VERSION} {EDITION}")
+        except Exception:
+            print("unknown")
+        return
+
     parser = argparse.ArgumentParser(
         prog="localmask",
         description="LocalMask Pro CLI — service client for secret detection and masking",

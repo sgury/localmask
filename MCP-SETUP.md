@@ -121,3 +121,38 @@ local-only guarantee.
 Native plugin in progress. Meanwhile the CLI covers the whole flow
 (`localmask scan / review / decide / publish`), and AI Assistant builds with
 MCP support can use the same manual config as above.
+
+---
+
+## Closed / air-gapped environments
+
+LocalMask is built for networks that never touch the internet:
+
+**The guarantee.** Nothing in LocalMask initiates a network connection on its
+own. The only two places that can reach out are `localmask check-updates` and
+the version line of `localmask license` — both run only when you type them,
+and both are blocked by the Closed-Environment network policy unless your
+mirror host is explicitly allowlisted. Scanning, masking, review, MCP — all
+purely local. Updates are always a human decision.
+
+**Offline install** (no internet at any step):
+
+1. On a connected machine, download once: the edition tarball
+   (`localmask-<edition>-<version>.tar.gz`) and the extension
+   (`localmask-key-toggle-<version>.vsix`). Move both inside.
+2. CLI: unpack the tarball and run `./install-cli.sh` — it installs from the
+   local files, no downloads.
+3. VS Code: `code --install-extension localmask-key-toggle-<version>.vsix`
+   (or Extensions → ⋯ → Install from VSIX). JetBrains: Settings → Plugins →
+   ⚙ → Install Plugin from Disk → `localmask-jetbrains-<version>.zip`.
+
+**Recommended org settings:**
+
+- Disable marketplace auto-update and distribute the VSIX from your internal
+  artifact store: `"extensions.autoUpdate": false`.
+- Point the extension's install button at your mirror:
+  `"localmask.installCommand": "sh /opt/mirrors/localmask/install-cli.sh"`.
+- Version skew is safe by design: the extension probes `localmask --version`
+  and degrades gracefully against an older CLI (core features keep working,
+  newer surfaces hide with an update hint) — so you can roll out the CLI and
+  the extension on different schedules.

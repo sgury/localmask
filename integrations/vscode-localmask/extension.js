@@ -66,12 +66,19 @@ function realPathOf(uri) {
 
 function activate(context) {
   const emitter = new vscode.EventEmitter();
+  let cliLabel = "";   // "CLI 0.9.9 pro" — set by the version probe
 
   // Masked-content cache keyed by real path — invalidated when the file's
   // mtime changes. The engine cold-starts in seconds; a re-flip must not.
   const cache = new Map();
 
   async function maskedContent(filePath) {
+    if (!fs.existsSync(cliPath())) {
+      return "// LocalMask: the CLI isn't installed yet (extension-only install).\n" +
+             "// One command sets it up — 100% local, no account:\n" +
+             "//   curl -sL https://localmaskpro.com/install-mcp.sh | bash\n" +
+             "// Then click the shield in the status bar to scan.\n";
+    }
     const scanId = findScanId(vscode.Uri.file(filePath));
     if (!scanId) {
       return "// LocalMask: no scan found for this repo yet.\n" +
@@ -163,7 +170,8 @@ function activate(context) {
         : (d.status === "published" || d.publish_target) ? "🚀 published"
         : d.status === "approved" ? "✓ approved" : (d.status || "");
       shield.text = `$(shield) ${dets.length} findings · ${stage}`;
-      shield.tooltip = `LocalMask — scan ${scanId}. Click for actions (sync, review, teach, approve, publish, hook). 100% local.`;
+      shield.tooltip = `LocalMask — scan ${scanId}. Click for actions (sync, review, teach, approve, publish, hook). 100% local.` +
+        (cliLabel ? ` ${cliLabel}` : "");
     } catch (e) { /* keep current badge */ }
   }
 
@@ -301,6 +309,9 @@ function activate(context) {
   // ── Shield click: the LocalMask menu ──────────────────────────────
   context.subscriptions.push(
     vscode.commands.registerCommand("localmask.scan", async () => {
+      // Extension installed but CLI missing (fresh marketplace install):
+      // clicking the shield starts the guided install instead of an ENOENT.
+      if (!fs.existsSync(cliPath())) { probeCli(true); return; }
       const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
       if (!folder) {
         vscode.window.showWarningMessage("LocalMask: open a folder first.");
@@ -460,6 +471,105 @@ function activate(context) {
     const r = path.relative(root, fsPath);
     return r.startsWith("..") ? "" : r.split(path.sep).join("/");
   };
+
+  // ── CLI version handshake ─────────────────────────────────────────
+  // decide/teach --stdin need CLI ≥ 0.9.9. Older CLI (or one without
+  // --version at all) → hide those surfaces + one-time upgrade hint;
+  // toggle/shield/scan keep working on any CLI.
+  const MIN_CLI = "0.9.9";
+  const versionLt = (a, b) => {
+    if (a === "dev") return false;             // dev tree = always current
+    const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0);
+    }
+    return false;
+  };
+  // Closed/air-gapped orgs override this with their internal mirror
+  // (Settings → localmask.installCommand). The command NEVER runs
+  // automatically — only when the user clicks "Install now".
+  const installCmd = () =>
+    vscode.workspace.getConfiguration("localmask").get("installCommand") ||
+    "curl -sL https://localmaskpro.com/install-mcp.sh | bash";
+  // cliState.missing → CLI not installed at all (fresh extension-only
+  // install); .old → installed but pre-0.9.9. Edition (free/pro/team/ent)
+  // rides along for display — the extension works identically on all
+  // editions, so upgrading to Pro/Team just changes the label.
+  const cliState = { missing: false, old: false, version: "", edition: "" };
+
+  function offerInstall() {
+    vscode.window.showInformationMessage(
+      "🛡 LocalMask: the extension is installed, but the LocalMask CLI isn't. " +
+      "One command sets it up (100% local, no account):",
+      "Install now", "Copy command"
+    ).then((pick) => {
+      try {
+        if (pick === "Install now") {
+          const term = vscode.window.createTerminal({ name: "LocalMask Install" });
+          term.show();
+          term.sendText(installCmd());
+        } else if (pick === "Copy command") {
+          vscode.env.clipboard.writeText(installCmd());
+          vscode.window.setStatusBarMessage("🛡 install command copied", 4000);
+        }
+      } catch (e) { logErr("offerInstall", e); }
+    });
+  }
+
+  function probeCli(interactive) {
+    try {
+      const missingNow = !fs.existsSync(cliPath());
+      cp.execFile(cliPath(), ["--version"], { timeout: 5000 },
+        (err, stdout) => {
+          try {
+            const out = err ? "" : String(stdout).trim().split(/\s+/);
+            const wasBroken = cliState.missing || cliState.old;
+            cliState.version = out[0] || "";
+            cliState.edition = out[1] || "";
+            cliLabel = cliState.version
+              ? `CLI ${cliState.version} ${cliState.edition}`.trim() : "";
+            cliState.missing = missingNow || (!!err && !cliState.version);
+            cliState.old = !cliState.missing &&
+              (!cliState.version || versionLt(cliState.version, MIN_CLI));
+            vscode.commands.executeCommand("setContext",
+              "localmask.cliOld", cliState.old || cliState.missing);
+            if (cliState.missing) {
+              if (interactive || !context.globalState.get("lm.cliMissingNotified")) {
+                context.globalState.update("lm.cliMissingNotified", true);
+                offerInstall();
+              }
+            } else if (cliState.old) {
+              const key = "lm.cliOldNotified." + cliState.version;
+              if (!context.globalState.get(key)) {
+                context.globalState.update(key, true);
+                vscode.window.showInformationMessage(
+                  "🛡 LocalMask CLI " + cliState.version + " is older than this " +
+                  "extension — in-editor review is disabled. Update: " + installCmd());
+              }
+            } else if (wasBroken) {
+              // Just became healthy (fresh install finished, or Pro/Team
+              // upgrade replaced the CLI) — light everything up.
+              vscode.window.setStatusBarMessage(
+                `🛡 LocalMask CLI ready — ${cliState.version} ${cliState.edition}`, 6000);
+              model.scanId = ""; model._resolvedAt = 0;
+              loadModel();
+              refreshShield();
+            }
+          } catch (e) { logErr("probeCli", e); }
+        });
+    } catch (e) { logErr("probeCli", e); }
+  }
+  probeCli(false);
+  // Re-probe when an install/upgrade may have happened: the install terminal
+  // closes, or the window regains focus (user ran the curl in another shell,
+  // or activated a Pro/Team license).
+  context.subscriptions.push(
+    vscode.window.onDidCloseTerminal((t) => {
+      if (t.name === "LocalMask Install") probeCli(false);
+    }),
+    vscode.window.onDidChangeWindowState((s) => {
+      if (s.focused && (cliState.missing || cliState.old)) probeCli(false);
+    }));
 
   // ── Detection model: one loader + one change event ────────────────
   const model = {
@@ -664,6 +774,7 @@ function activate(context) {
     vscode.languages.registerCodeActionsProvider({ scheme: "file" }, {
       provideCodeActions(doc, range, ctx) {
         try {
+          if (cliState.old || cliState.missing) return [];   // no `decide` available
           const mine = (ctx.diagnostics || []).filter((d) => d.source === "LocalMask");
           if (!mine.length) return [];
           const line = range.start.line + 1;

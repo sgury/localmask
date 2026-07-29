@@ -2,7 +2,7 @@
   "name": "localmask-key-toggle",
   "displayName": "LocalMask",
   "description": "Mask secrets & PII before any AI sees your code — 100% local. Key toggle real/masked view, in-editor review, teach-by-marking, masked mirror publish.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "localmask",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -127,15 +127,17 @@
         {
           "command": "localmask.teachSelection",
           "group": "1_teach@1",
-          "when": "editorHasSelection"
+          "when": "editorHasSelection && !localmask.cliOld"
         },
         {
           "command": "localmask.approveHere",
-          "group": "2_decide@1"
+          "group": "2_decide@1",
+          "when": "!localmask.cliOld"
         },
         {
           "command": "localmask.rejectHere",
-          "group": "2_decide@2"
+          "group": "2_decide@2",
+          "when": "!localmask.cliOld"
         },
         {
           "command": "localmask.compare",
@@ -153,32 +155,32 @@
         {
           "command": "localmask.approveDet",
           "group": "inline@1",
-          "when": "view == localmaskReview && viewItem == lmDet-pending"
+          "when": "view == localmaskReview && viewItem == lmDet-pending && !localmask.cliOld"
         },
         {
           "command": "localmask.rejectDet",
           "group": "inline@2",
-          "when": "view == localmaskReview && viewItem == lmDet-pending"
+          "when": "view == localmaskReview && viewItem == lmDet-pending && !localmask.cliOld"
         },
         {
           "command": "localmask.approveDet",
           "group": "1_decide@1",
-          "when": "view == localmaskReview && viewItem =~ /^lmDet/"
+          "when": "view == localmaskReview && viewItem =~ /^lmDet/ && !localmask.cliOld"
         },
         {
           "command": "localmask.rejectDet",
           "group": "1_decide@2",
-          "when": "view == localmaskReview && viewItem =~ /^lmDet/"
+          "when": "view == localmaskReview && viewItem =~ /^lmDet/ && !localmask.cliOld"
         },
         {
           "command": "localmask.approveFileNode",
           "group": "inline@1",
-          "when": "view == localmaskReview && viewItem == lmFile"
+          "when": "view == localmaskReview && viewItem == lmFile && !localmask.cliOld"
         },
         {
           "command": "localmask.rejectFileNode",
           "group": "1_decide@1",
-          "when": "view == localmaskReview && viewItem == lmFile"
+          "when": "view == localmaskReview && viewItem == lmFile && !localmask.cliOld"
         }
       ]
     },
@@ -252,6 +254,11 @@
           },
           "default": [],
           "description": "Your own token categories for teach (e.g. CUSTOMER_ID, IBAN). They appear at the top of the type picker; the token becomes ~[NAME_N]~."
+        },
+        "localmask.installCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Closed/air-gapped environments: override the CLI install command with your internal mirror (e.g. 'sh /opt/mirrors/localmask/install-cli.sh'). Empty = the public installer. The command only runs when you click \"Install now\" — never automatically."
         }
       }
     }
