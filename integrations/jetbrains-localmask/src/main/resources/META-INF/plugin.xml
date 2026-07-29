@@ -3,11 +3,31 @@
     <name>LocalMask</name>
     <vendor url="https://localmaskpro.com">LocalMask</vendor>
     <description><![CDATA[
-        Mask secrets &amp; PII before any AI sees your code — 100% local.<br/>
-        🛡 status-bar shield: scan, approve, publish the masked mirror.<br/>
-        🔑 toggle a read-only masked view (what the AI sees).<br/>
-        Requires the free LocalMask CLI (localmaskpro.com).
+        <p><b>Mask secrets &amp; PII before any AI sees your code — 100% local.</b></p>
+        <p>LocalMask scans your repo, replaces every secret with an opaque token
+        like <code>~[PASSWORD_0]~</code>, and keeps the real values on your
+        machine. Point Copilot, Claude, or any AI at the masked view or the
+        masked git mirror — they get working code, never your credentials.</p>
+        <ul>
+          <li><b>🛡 Status-bar shield</b> — live findings count and review stage;
+              click for the menu: scan / sync, approve all, publish the masked
+              mirror, review, install the auto-sync commit hook.</li>
+          <li><b>🔑 Masked view</b> (<code>Cmd/Ctrl+Alt+K</code> or right-click) —
+              a read-only view of the current file exactly as an AI would see it.</li>
+          <li><b>Privacy model</b> — everything runs locally over the LocalMask
+              CLI; no accounts, no telemetry, no network calls; works fully
+              air-gapped.</li>
+        </ul>
+        <p>Requires the free LocalMask CLI:
+        <code>curl -sL https://localmaskpro.com/install-mcp.sh | bash</code></p>
+        <p>Works in PyCharm, IntelliJ IDEA, DataGrip, GoLand, WebStorm — any
+        2023.3+ IDE.</p>
     ]]></description>
+    <change-notes><![CDATA[
+        <b>0.1.0</b> — first release: status-bar shield with scan/approve/
+        publish/review/hook actions, read-only masked view (what the AI sees),
+        CLI version display. 100% local.
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
 
