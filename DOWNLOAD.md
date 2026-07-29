@@ -9,14 +9,22 @@ Three ways, pick one:
 pip install localmask
 
 # 2. From source
-git clone https://github.com/sgury11/localmask
+git clone https://github.com/sgury/localmask
 pip install ./localmask
 
 # 3. From a release tarball
-tar -xzf localmask-free-0.9.0.tar.gz && cd localmask-free-0.9.0 && pip install .
+tar -xzf localmask-free-0.9.9.tar.gz && cd localmask-free-0.9.9 && pip install .
 ```
 
 Requires Python 3.10+. No ML or cloud dependencies.
+
+### IDE extension (all editions)
+
+VS Code: **Extensions → search "LocalMask" → Install** (publisher
+`localmask`), or `code --install-extension localmask.localmask-key-toggle`.
+Works unchanged in Cursor / Windsurf / VSCodium. JetBrains plugin source
+ships in every tarball under `integrations/jetbrains-localmask/`. If the CLI
+isn't installed yet, the extension offers a one-click guided install.
 
 ### Quickstart
 

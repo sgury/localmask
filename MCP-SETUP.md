@@ -78,19 +78,31 @@ to sync policy and share the vault across the team.)
 
 ---
 
-## Other editors
+## The editor extension
+
+### VS Code — from the Marketplace
+
+**Extensions panel → search "LocalMask" → Install** (publisher `localmask`), or:
+
+```bash
+code --install-extension localmask.localmask-key-toggle
+```
+
+If the LocalMask CLI isn't installed yet, the extension offers a one-click
+guided install the first time you click the shield.
 
 ### Cursor · Windsurf · VSCodium
 
-The VS Code extension works unchanged in every VS Code fork:
+The same extension works unchanged in every VS Code fork — search "LocalMask"
+in their extension panels (served from OpenVSX), or sideload the VSIX:
 
 ```bash
 # Cursor
-cursor --install-extension localmask-key-toggle-0.2.0.vsix
+cursor --install-extension localmask-key-toggle-<version>.vsix
 # Windsurf
-windsurf --install-extension localmask-key-toggle-0.2.0.vsix
-# VSCodium (also finds it on OpenVSX: search "LocalMask")
-codium --install-extension localmask-key-toggle-0.2.0.vsix
+windsurf --install-extension localmask-key-toggle-<version>.vsix
+# VSCodium
+codium --install-extension localmask-key-toggle-<version>.vsix
 ```
 
 The MCP side is registered automatically by `localmask mcp-install`
