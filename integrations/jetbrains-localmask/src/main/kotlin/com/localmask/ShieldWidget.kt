@@ -47,8 +47,11 @@ class ShieldWidget(private val project: Project) :
 
     override fun getText() = text
     override fun getAlignment() = 0f
-    override fun getTooltipText() =
-        "LocalMask — click for actions (scan, review, publish). 100% local."
+    override fun getTooltipText(): String {
+        val v = try { LocalMask.cliVersion() } catch (e: Exception) { "" }
+        return "LocalMask — click for actions (scan, review, publish). " +
+            "100% local." + (if (v.isNotEmpty()) " CLI $v" else "")
+    }
 
     override fun getClickConsumer(): Consumer<MouseEvent> =
         Consumer { ActionMenu.show(project) { refresh() } }

@@ -20,6 +20,11 @@ object LocalMask {
 
     fun installed(): Boolean = cli.canExecute()
 
+    /** "<version> <edition>" from `localmask --version`, or "" (old CLI).
+     *  The plugin only uses commands every CLI version has, so this is
+     *  informational (shield tooltip), not a gate. */
+    fun cliVersion(): String = run(listOf("--version"), null, 5).trim()
+
     /** Latest scan id for the project root: git hook comment, then `scan-id`. */
     fun scanId(project: Project): String {
         val root = project.basePath ?: return ""
