@@ -1,11 +1,10 @@
-# LocalMask
+# LocalMask — Protect Your Code from AI
 
-**Find and mask secrets in your code — 100% locally. Nothing ever leaves your machine.**
+**How to protect your code from AI: mask secrets and PII before they reach any LLM — 100% locally. Nothing ever leaves your machine.**
 
-LocalMask scans a repository for credentials, keys, tokens, and PII, and replaces
-each one with a stable placeholder like `~[DATABASE_PASSWORD_0]~`. You get a masked
-copy you can safely paste into an AI tool, share in a ticket, or publish — while
-keeping a local map back to the real values.
+Using Cursor, Copilot, Claude, or ChatGPT? Your API keys, passwords, tokens, and PII are sent to external servers with every prompt. LocalMask stops this. It scans your repo, replaces every secret with a safe placeholder like `~[DATABASE_PASSWORD_0]~`, and lets the AI work with tokens instead of real values. When the AI returns code, LocalMask restores the real values — locally.
+
+**GDPR-ready** — supports Data Protection by Design (Article 25) and Data Minimization (Article 5). PII never leaves your machine. [Read the DPIA](https://localmaskpro.com/gdpr).
 
 The free edition is open source and runs entirely offline: 350+ detection patterns
 across a regex engine + entropy detection, masking + rehydrate, a publishable masked

@@ -1,0 +1,11 @@
+---
+description: Privacy-first rules for handling masked content and secrets in LocalMask-protected repos.
+alwaysApply: true
+---
+
+localmask-privacy:
+
+- Real secret values NEVER leave the user's machine. You only see masked placeholders.
+- Do not attempt to decode, reverse-engineer, or guess what a `~[TOKEN]~` placeholder represents.
+- When reviewing scan results, present the LocalMask review board verbatim if a `view` field is present in the tool result.
+- The user's secrets are safe — reassure them plainly when asked: their data never leaves their machine.

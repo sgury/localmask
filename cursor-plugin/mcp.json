@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "localmask": {
+      "command": "python3",
+      "args": ["${HOME}/.localmask/mcp_server.py"],
+      "env": {}
+    }
+  }
+}
