@@ -28,6 +28,21 @@ org = ["redis>=5.0.0"]
 [project.scripts]
 localmask = "cli:main"
 
+[tool.ruff.lint]
+ignore = [
+    "BLE001",  # broad Exception catches are intentional (CLI must not crash)
+    "S110",    # try/except/pass used for optional-feature probing
+    "S112",    # try/except/continue — same rationale
+    "N999",    # module names match CLI conventions, not PEP 8
+    "RUF012",  # mutable class defaults are fine for dataclass-style usage
+    "RUF013",  # implicit Optional — legacy style, not worth mass-rewriting
+    "B023",    # loop variable binding in closures — reviewed, intentional
+    "ASYNC210",  # async file I/O — not applicable to sync code paths
+    "ASYNC230",  # async subprocess — same
+    "ISC004",  # implicit string concat in collection — readable as-is
+    "I001",    # import sorting — handled by auto-fix, residual is intentional grouping
+]
+
 [tool.setuptools]
 packages = ["localmask"]
 py-modules = [

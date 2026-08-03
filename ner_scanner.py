@@ -55,7 +55,7 @@ MIN_ENTITY_LEN = _NER_DATA["min_entity_len"]
 # Only filter out obvious non-entities (SQL keywords). Built from the data file.
 _NOISE_FILTER = re.compile(
     r'^(?:' + "|".join(re.escape(k) for k in _NER_DATA["noise_keywords"])
-    + r')\b', re.I
+    + r')\b', re.IGNORECASE
 )
 
 # Public tech vocabulary — vendor names, infra roles, architecture labels.
@@ -74,7 +74,7 @@ def reload_ner_data():
     MIN_ENTITY_LEN = _NER_DATA["min_entity_len"]
     _NOISE_FILTER = re.compile(
         r'^(?:' + "|".join(re.escape(k) for k in _NER_DATA["noise_keywords"])
-        + r')\b', re.I)
+        + r')\b', re.IGNORECASE)
     _TECH_TERMS = {t.lower() for t in _NER_DATA["tech_terms"]}
     NERScanner._FALLBACK_PATTERNS = _NER_DATA["fallback_patterns"]
     return {"tech_terms": len(_TECH_TERMS),
@@ -87,7 +87,8 @@ def add_tech_term(term: str, save: bool = True):
     if term.lower() not in [t.lower() for t in _NER_DATA["tech_terms"]]:
         _NER_DATA["tech_terms"].append(term.lower())
     if save:
-        json.dump(_NER_DATA, open(_NER_FILE, "w"), indent=2)
+        with open(_NER_FILE, "w") as _f:
+            json.dump(_NER_DATA, _f, indent=2)
 
 
 def _is_tech_term(text: str) -> bool:

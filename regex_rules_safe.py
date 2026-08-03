@@ -108,7 +108,7 @@ def _collect_direct_mask(universal: dict, file_type_extra: dict) -> set:
     for name, body in (universal or {}).items():
         if isinstance(body, dict) and body.get("mask_mode") == "direct":
             names.add(name)
-    for _ft, pats in (file_type_extra or {}).items():
+    for pats in (file_type_extra or {}).values():
         for name, body in (pats or {}).items():
             if isinstance(body, dict) and body.get("mask_mode") == "direct":
                 names.add(name)
@@ -167,9 +167,9 @@ class RegexRulesSafe:
     def _detect_project_type(cls, file_path: str, content: str) -> str | None:
         """Return extra pattern-set key if a project type is detected from context."""
         p = file_path.replace("\\", "/").lower()
-        if (p.endswith(".sql") or p.endswith(".yml") or p.endswith(".yaml")):
-            if "{{ ref(" in content or "{{ source(" in content or "dbt_project" in p:
-                return "dbt"
+        if p.endswith((".sql", ".yml", ".yaml")) \
+                and ("{{ ref(" in content or "{{ source(" in content or "dbt_project" in p):
+            return "dbt"
         return None
 
     @classmethod
@@ -350,10 +350,7 @@ class RegexRulesSafe:
 
         # MorphemeDense — value splits into 4+ natural-language words → prose
         words = re.split(r"[\s_\-]+", entity)
-        if len(words) >= 4 and all(w.isalpha() and len(w) >= 3 for w in words):
-            return True
-
-        return False
+        return bool(len(words) >= 4 and all(w.isalpha() and len(w) >= 3 for w in words))
 
     @classmethod
     def _is_public_service_url(cls, value: str) -> bool:
@@ -384,9 +381,7 @@ class RegexRulesSafe:
         if value.isalpha() and value.islower() and cls._entropy(value) < 3.0:
             return True
         # Extremely low entropy at any length (aaaaaa, 111111, abcabc)
-        if len(value) >= 6 and cls._entropy(value) < 2.0:
-            return True
-        return False
+        return bool(len(value) >= 6 and cls._entropy(value) < 2.0)
 
     # Regex to detect email-like strings that are actually userinfo in URLs
     _EMAIL_IN_URL_RE = re.compile(
@@ -414,9 +409,7 @@ class RegexRulesSafe:
             return True
         if cls._HTTP_HEADER_RE.match(value):
             return True
-        if cls._LOCAL_CONN_RE.search(value):
-            return True
-        return False
+        return bool(cls._LOCAL_CONN_RE.search(value))
 
     # Lines that are structural boilerplate — never contain secrets
     SKIP_LINE_PATTERNS = [
@@ -478,14 +471,14 @@ class RegexRulesSafe:
                     # "…access-token-for-the-command-line/" is a help-page
                     # path, not a token. Skip when the match sits within a
                     # URL on the same line.
-                    if pattern_name.startswith("prose_") and "://" in line:
-                        if any(entity in u for u in
-                               re.findall(r"https?://\S+", line)):
-                            continue
+                    if pattern_name.startswith("prose_") and "://" in line \
+                            and any(entity in u for u in
+                                    re.findall(r"https?://\S+", line)):
+                        continue
                     # Skip email-like matches that are part of a connection URL
-                    if pattern_name == "email" and "@" in entity:
-                        if cls._EMAIL_IN_URL_RE.search(line):
-                            continue
+                    if pattern_name == "email" and "@" in entity \
+                            and cls._EMAIL_IN_URL_RE.search(line):
+                        continue
                     results.append({
                         "entity":         entity,
                         "type":           pattern_name,

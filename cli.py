@@ -26,7 +26,7 @@ import re
 import sys
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ── Constants ────────────────────────────────────────────────────────────────
 CONFIG_DIR = os.path.expanduser("~/.localmask")
@@ -187,7 +187,8 @@ def _mcp_install(project: bool = False, dry_run: bool = False):
             cfg = {}
             if os.path.exists(path):
                 try:
-                    cfg = _json.loads(open(path).read() or "{}")
+                    with open(path) as _f:
+                        cfg = _json.loads(_f.read() or "{}")
                 except Exception:
                     cfg = {}
             cfg.setdefault("mcpServers", {})["localmask"] = entry
@@ -211,14 +212,16 @@ def _mcp_install(project: bool = False, dry_run: bool = False):
             # prior user-scoped entry first so re-running updates a stale server.
             # A stale entry in local/project scope would shadow this — warn if so.
             subprocess.run(["claude", "mcp", "remove", "-s", "user", "localmask"],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, check=False)
             r = subprocess.run(["claude", "mcp", "add", "-s", "user", "localmask",
-                                "--", py, script], capture_output=True, text=True)
+                                "--", py, script], capture_output=True, text=True,
+                               check=False)
             if r.returncode == 0:
                 print(f"  {G}✓{X} Claude Code (CLI) {D}(user scope){X}")
                 done += 1
                 shown = subprocess.run(["claude", "mcp", "list"],
-                                       capture_output=True, text=True).stdout
+                                       capture_output=True, text=True,
+                                       check=False).stdout
                 if script not in shown and "localmask" in shown:
                     print(f"  {Y}  note:{X} another localmask entry (project/local "
                           f"scope) may shadow this — remove it with "
@@ -281,9 +284,9 @@ def _proxy_setup(tool: str, port: int):
 
     if not tool:
         print(f"\n  {B}Usage:{X} localmask proxy setup <claude-code|cursor|codex|env>\n")
-        print(f"  Routes the tool's AI traffic through your local masking proxy")
+        print("  Routes the tool's AI traffic through your local masking proxy")
         print(f"  ({base}) so secrets are masked on THIS machine before anything")
-        print(f"  is sent upstream.\n")
+        print("  is sent upstream.\n")
         return
 
     # 1) Seed proxy.yaml so the user just adds their upstream key.
@@ -317,7 +320,8 @@ def _proxy_setup(tool: str, port: int):
         data = {}
         if os.path.exists(settings):
             try:
-                data = _json.load(open(settings))
+                with open(settings) as _f:
+                    data = _json.load(_f)
             except Exception:
                 data = {}
             import shutil
@@ -339,7 +343,7 @@ def _proxy_setup(tool: str, port: int):
         print(f"  {B}Any tool:{X} {C}source {env_path}{X}  (sets ANTHROPIC_BASE_URL + OPENAI_BASE_URL)")
 
     print(f"\n  {Y}Note:{X} put your real upstream API key in {cfg_path} — the tool")
-    print(f"  talks only to the local proxy; the proxy holds the key and masks first.\n")
+    print("  talks only to the local proxy; the proxy holds the key and masks first.\n")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -581,21 +585,21 @@ def _print_grant_guide(target_url: str, scan_id: str):
     print(f"  {DIM}(It only ever sees ~[TOKEN]~ placeholders — no real secrets.){RESET}\n")
     print(f"  {BOLD}A) The AI reads the published masked git mirror{RESET}")
     print(f"     Give the AI its {BOLD}own{RESET} read access to {CYAN}{target_url}{RESET}")
-    print(f"     (read-only collaborator, deploy key, or GitHub/GitLab App), then it")
+    print("     (read-only collaborator, deploy key, or GitHub/GitLab App), then it")
     print(f"     {BOLD}clones/pulls that repo{RESET} — a copy on the AI's side, separate")
-    print(f"     from your real code. LocalMask never shares your git token.")
+    print("     from your real code. LocalMask never shares your git token.")
     print(f"     {DIM}After you change code:{RESET} {CYAN}localmask sync {scan_id}{RESET} "
           f"{DIM}re-masks and{RESET}")
     print(f"     {DIM}re-pushes the mirror (once approved); the AI does{RESET} "
           f"{CYAN}git pull{RESET} {DIM}to get it.{RESET}\n")
     print(f"  {BOLD}B) The AI reads live from LocalMask — nothing published{RESET}")
-    print(f"     In your AI editor's MCP config, the assistant calls LocalMask's")
+    print("     In your AI editor's MCP config, the assistant calls LocalMask's")
     print(f"     {CYAN}get_detections{RESET} / {CYAN}get_file_masked{RESET} tools. No git repo, no")
     print(f"     pull — LocalMask serves the {BOLD}current{RESET} masked content each call")
     print(f"     (run {CYAN}localmask sync {scan_id}{RESET} {DIM}after code changes so it's fresh).{RESET}")
     print(f"\n  {DIM}The difference:{RESET} (A) the AI holds its own git copy and "
           f"{BOLD}pulls{RESET} to update;")
-    print(f"  (B) LocalMask streams the masked files live, always current, no repo.\n")
+    print("  (B) LocalMask streams the masked files live, always current, no repo.\n")
 
 
 _ASK_DEFAULT_MODELS = {
@@ -695,9 +699,19 @@ def _local_ask(args):
 
 class Detection:
     """Single detection instance (metadata only — no real secret values)."""
-    __slots__ = ("id", "token", "det_type", "line", "confidence",
-                 "context_lines", "file", "decision",
-                 "confidence_override", "reason", "timestamp")
+    __slots__ = (
+        "confidence",
+        "confidence_override",
+        "context_lines",
+        "decision",
+        "det_type",
+        "file",
+        "id",
+        "line",
+        "reason",
+        "timestamp",
+        "token",
+    )
 
     def __init__(self, det_id, token, det_type, line, confidence, file,
                  context_lines=None):
@@ -920,12 +934,12 @@ class HierarchicalReviewer:
             if act == "a":
                 for d in dets:
                     d.decision = True
-                    d.timestamp = datetime.now().isoformat()
+                    d.timestamp = datetime.now(tz=timezone.utc).isoformat()
                 print(f"  {GREEN}✓ Approved all {len(dets)} in {f}{RESET}")
             elif act == "r":
                 for d in dets:
                     d.decision = False
-                    d.timestamp = datetime.now().isoformat()
+                    d.timestamp = datetime.now(tz=timezone.utc).isoformat()
                 print(f"  {RED}✗ Rejected all {len(dets)} in {f}{RESET} — "
                       f"it stays readable in the masked mirror.")
             else:
@@ -978,7 +992,7 @@ class HierarchicalReviewer:
                 for d in dets:
                     if d.decision is None:
                         d.decision = True
-                        d.timestamp = datetime.now().isoformat()
+                        d.timestamp = datetime.now(tz=timezone.utc).isoformat()
                 print(f"  {GREEN}✓ Approved all pending in {det_type}{RESET}")
                 self._input("  Press Enter to continue...")
                 continue
@@ -986,7 +1000,7 @@ class HierarchicalReviewer:
                 for d in dets:
                     if d.decision is None:
                         d.decision = False
-                        d.timestamp = datetime.now().isoformat()
+                        d.timestamp = datetime.now(tz=timezone.utc).isoformat()
                 print(f"  {RED}✗ Rejected all pending in {det_type}{RESET}")
                 self._input("  Press Enter to continue...")
                 continue
@@ -1011,8 +1025,7 @@ class HierarchicalReviewer:
 
     def review_instance(self, dets, idx):
         while True:
-            if idx < 0:
-                idx = 0
+            idx = max(idx, 0)
             if idx >= len(dets):
                 return
 
@@ -1043,8 +1056,8 @@ class HierarchicalReviewer:
             print(f"\n  {DIM}Actions:{RESET}")
             print(f"  {GREEN}[Y]{RESET}es approve   {RED}[N]{RESET}o reject   "
                   f"[E]dit confidence   [R]eason")
-            print(f"  [C]ontext expand   "
-                  f"[→] Next   [←] Prev   [B]ack")
+            print("  [C]ontext expand   "
+                  "[→] Next   [←] Prev   [B]ack")
             print()
 
             choice = self._input(
@@ -1053,7 +1066,7 @@ class HierarchicalReviewer:
 
             if choice.lower() == "y":
                 d.decision = True
-                d.timestamp = datetime.now().isoformat()
+                d.timestamp = datetime.now(tz=timezone.utc).isoformat()
                 print(f"  {GREEN}✓ Approved{RESET}")
                 idx += 1
                 if idx >= len(dets):
@@ -1063,7 +1076,7 @@ class HierarchicalReviewer:
 
             if choice.lower() == "n":
                 d.decision = False
-                d.timestamp = datetime.now().isoformat()
+                d.timestamp = datetime.now(tz=timezone.utc).isoformat()
                 reason = self._input(f"  {DIM}Reason (optional): {RESET}")
                 if reason:
                     d.reason = reason
@@ -1273,7 +1286,8 @@ def _ensure_gitignore(repo_dir: str):
     gitignore_path = os.path.join(repo_dir, ".gitignore")
     existing = ""
     if os.path.isfile(gitignore_path):
-        existing = open(gitignore_path).read()
+        with open(gitignore_path) as _f:
+            existing = _f.read()
 
     entries = _gitignore_entries()
     to_add = [e for e in entries if e not in existing and not e.startswith("#")]
@@ -1486,7 +1500,8 @@ def cmd_init(args):
         cc_settings = {}
         if os.path.isfile(spath):
             try:
-                cc_settings = json.loads(open(spath).read())
+                with open(spath) as _f:
+                    cc_settings = json.loads(_f.read())
             except Exception:
                 cc_settings = {}
         perms = cc_settings.setdefault("permissions", {})
@@ -1543,7 +1558,8 @@ def cmd_init(args):
         settings = {}
         if os.path.isfile(settings_path):
             try:
-                settings = json.loads(open(settings_path).read())
+                with open(settings_path) as _f:
+                    settings = json.loads(_f.read())
             except Exception:
                 pass
         if "chat.mcp.access" not in settings:
@@ -1979,7 +1995,11 @@ Full details: FINANCE.md""")
         if not scan:
             print(f"{RED}Scan not found: {args.scan_id}{RESET}"); sys.exit(1)
         session = _new_session(scan["repo_url"], temp=False)  # hydrates vault
-        text = open(args.file).read() if args.file else sys.stdin.read()
+        if args.file:
+            with open(args.file) as _f:
+                text = _f.read()
+        else:
+            text = sys.stdin.read()
         sys.stdout.write(_rehydrate(session, text))
         return
 
@@ -2002,7 +2022,7 @@ Full details: FINANCE.md""")
                     return
             except OSError:
                 continue
-        print("", end="")
+        print(end="")
         sys.exit(1)
 
     # ── mask-text (local) ────────────────────────────────────────────────────
@@ -2032,7 +2052,11 @@ Full details: FINANCE.md""")
             session["sensitivity"] = scan.get("summary_stats", {}).get(
                 "sensitivity", "standard")
             rel_name = os.path.basename(args.file) if args.file else "input.txt"
-            text = open(args.file).read() if args.file else sys.stdin.read()
+            if args.file:
+                with open(args.file) as _f:
+                    text = _f.read()
+            else:
+                text = sys.stdin.read()
             masked = _scan_file(session, text, rel_name)["masked"]
             # Cache the fresh result so the next view of this (edited) file
             # hits the fast path until the next scan/sync replaces it.
@@ -2361,10 +2385,10 @@ Full details: FINANCE.md""")
             if args.det:
                 if d.get("det_id") == args.det:
                     hits.append(d)
-            elif d.get("file", "").replace("\\", "/") == norm \
-                    or norm in (d.get("files") or []):
-                if not args.line or int(d.get("line", 0)) == args.line:
-                    hits.append(d)
+            elif (d.get("file", "").replace("\\", "/") == norm
+                    or norm in (d.get("files") or [])) \
+                    and (not args.line or int(d.get("line", 0)) == args.line):
+                hits.append(d)
         if not hits:
             where = args.det or (norm + (f":{args.line}" if args.line else ""))
             print(f"  {YELLOW}No detections match '{where}'.{RESET}")
@@ -2922,9 +2946,9 @@ Full details: FINANCE.md""")
                 repo = sc.get("repo_url", "")
                 try:
                     if repo and os.path.isdir(repo) \
-                            and os.path.samefile(repo, os.getcwd()):
-                        if sc.get("created_at", "") > best_t:
-                            scan_id, best_t = sid, sc.get("created_at", "")
+                            and os.path.samefile(repo, os.getcwd()) \
+                            and sc.get("created_at", "") > best_t:
+                        scan_id, best_t = sid, sc.get("created_at", "")
                 except OSError:
                     continue
             if not scan_id:

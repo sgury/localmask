@@ -37,7 +37,7 @@ def main():
         print("Running detection test suite...")
         proc = subprocess.run(
             [sys.executable, os.path.join(ROOT, "test_repos", "run_tests.py")],
-            cwd=ROOT)
+            cwd=ROOT, check=False)
         if proc.returncode != 0:
             print("Test suite failed to run")
             return 1

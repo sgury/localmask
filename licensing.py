@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import platform
-import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from urllib.request import Request, urlopen
@@ -322,8 +321,7 @@ class LicenseManager:
 
         if current >= limit:
             tier_name = self.tier_config["name"]
-            first_month = self._is_first_month()
-            period = "first month" if first_month else "monthly"
+            self._is_first_month()
             raise RuntimeError(
                 f"Monthly {action} limit reached ({current}/{limit} for {tier_name} tier). "
                 f"Upgrade to Pro for unlimited access — localmask activate LM-PRO-..."
@@ -352,7 +350,7 @@ class LicenseManager:
         first_month = self._is_first_month()
 
         limits = {}
-        for action, field in ACTION_LIMITS.items():
+        for action in ACTION_LIMITS:
             limit = self._get_monthly_limit(action)
             current = usage_month.get(action, 0)
             limits[action] = {
@@ -409,7 +407,7 @@ class LicenseManager:
             try:
                 with open(LICENSE_FILE) as f:
                     return json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 pass
         return {}
 
@@ -422,7 +420,7 @@ class LicenseManager:
             try:
                 with open(USAGE_FILE) as f:
                     return json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 pass
         return {}
 

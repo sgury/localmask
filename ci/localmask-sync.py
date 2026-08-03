@@ -82,7 +82,8 @@ def detect_source_repo():
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10,
+            check=False,
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -102,7 +103,7 @@ def find_existing_scan(source):
 
 def main():
     log(f"\n{BOLD}{'=' * 60}", CYAN)
-    log(f"  LocalMask Pro — CI/CD Sync Agent", CYAN + BOLD)
+    log("  LocalMask Pro — CI/CD Sync Agent", CYAN + BOLD)
     log(f"{'=' * 60}{RESET}\n", CYAN)
 
     # ── Validate config ─────────────────────────────────────────
@@ -138,7 +139,7 @@ def main():
 
     if scan_id:
         log(f"  Existing scan: {CYAN}{scan_id}{RESET}")
-        log(f"  Syncing (re-scan with preserved tokens)...")
+        log("  Syncing (re-scan with preserved tokens)...")
 
         body = {}
         if GIT_TOKEN:
@@ -163,7 +164,7 @@ def main():
         log(f"  Carried:  {carried} previous decisions")
         log(f"  Pending:  {pending} need review")
     else:
-        log(f"  No existing scan — creating new scan...")
+        log("  No existing scan — creating new scan...")
 
         body = {
             "repo_url": source,
@@ -201,20 +202,20 @@ def main():
             log(f"  {GREEN}Approved {len(decisions)} detections{RESET}")
         pending = 0
     else:
-        log(f"\n[3/5] Review check...", BOLD)
+        log("\n[3/5] Review check...", BOLD)
         if pending > 0:
             log(f"  {YELLOW}{pending} detections pending review{RESET}")
         else:
             log(f"  {GREEN}All detections reviewed{RESET}")
 
     # ── Step 4: Submit + approve scan ───────────────────────────
-    log(f"\n[4/5] Approving scan...", BOLD)
+    log("\n[4/5] Approving scan...", BOLD)
     scan = api("GET", f"/api/repos/{scan_id}")
     status = scan.get("status", "draft")
 
     if status in ("draft", "rejected"):
         api("POST", f"/api/repos/{scan_id}/submit", {"submitted_by": "ci-pipeline"})
-        log(f"  Submitted for review")
+        log("  Submitted for review")
 
     scan = api("GET", f"/api/repos/{scan_id}")
     status = scan.get("status", "")
@@ -225,12 +226,12 @@ def main():
         })
         log(f"  {GREEN}Approved{RESET}")
     elif status == "approved":
-        log(f"  Already approved")
+        log("  Already approved")
     elif status == "published":
-        log(f"  Already published")
+        log("  Already published")
 
     # ── Step 5: Publish masked repo ─────────────────────────────
-    log(f"\n[5/5] Publishing masked repo...", BOLD)
+    log("\n[5/5] Publishing masked repo...", BOLD)
 
     pub_body = {"target_url": MASKED_REPO}
     if GIT_TOKEN:
@@ -248,7 +249,7 @@ def main():
 
     # ── Summary ─────────────────────────────────────────────────
     log(f"\n{'=' * 60}", GREEN)
-    log(f"  LocalMask CI/CD Sync Complete", GREEN + BOLD)
+    log("  LocalMask CI/CD Sync Complete", GREEN + BOLD)
     log(f"{'=' * 60}\n", GREEN)
     log(f"  Scan ID:    {scan_id}")
     log(f"  Detections: {total}")

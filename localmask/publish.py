@@ -37,7 +37,8 @@ def _auto_publish(scan: dict) -> dict | None:
                 continue
             out = os.path.join(tmp, rel)
             os.makedirs(os.path.dirname(out) or tmp, exist_ok=True)
-            open(out, "w").write(d["masked"])
+            with open(out, "w") as _f:
+                _f.write(d["masked"])
             written += 1
 
         username = scan.get("username", "")

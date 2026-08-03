@@ -71,17 +71,15 @@ def _vocab():
     keywords = tuple(w for words in cats.values() for w in words) + extra
     res = [
         # ₪42,000  /  $ 1,234.56  — symbol before the number
-        re.compile(r"(?<![\d\w.])([₪$€£]\s?(?:%s))(?![\d\w%%])(?!\.\d)" % _NUM),
+        re.compile(rf"(?<![\d\w.])([₪$€£]\s?(?:{_NUM}))(?![\d\w%])(?!\.\d)"),
         # 42,000 ₪  /  1234.56€ — symbol after the number
-        re.compile(r"(?<![\d\w.])((?:%s)\s?[₪$€£])(?![\d\w%%])" % _NUM),
+        re.compile(rf"(?<![\d\w.])((?:{_NUM})\s?[₪$€£])(?![\d\w%])"),
         # 42,000 ILS / 1,200 ש"ח — currency code after a formatted number
-        re.compile(r"(?<![\d\w.])((?:%s)\s?(?:%s))(?![\d\w%%])(?!\.\d)"
-                   % (_NUM, "|".join(re.escape(c) for c in _CODES)), re.I),
+        re.compile(r"(?<![\d\w.])((?:{})\s?(?:{}))(?![\d\w%])(?!\.\d)".format(_NUM, "|".join(re.escape(c) for c in _CODES)), re.IGNORECASE),
         # keyword-anchored bare number: salary: 95000 / bonus_dana = 15000 —
         # a bounded [\w\s] gap allows suffixes between the keyword and the
         # separator. Bare numbers are ONLY flagged next to a finance keyword.
-        re.compile(r"(?i)(?:%s)[\w\s]{0,24}?[:=]\s*['\"]?((?:%s))(?![\d\w%%])(?!\.\d)"
-                   % ("|".join(re.escape(k) for k in keywords), _NUM)),
+        re.compile(r"(?i)(?:{})[\w\s]{{0,24}}?[:=]\s*['\"]?((?:{}))(?![\d\w%])(?!\.\d)".format("|".join(re.escape(k) for k in keywords), _NUM)),
     ]
     _vocab_cache.update(key=key, cats=cats, res=res)
     return cats, res
@@ -218,7 +216,7 @@ def money_token(session: dict, value: str, det: dict) -> str:
     mode = money_mode()
     num = det.get("money_value") or 0
     cur = det.get("money_currency", "UNK")
-    cat = det.get("money_category", "amount")
+    det.get("money_category", "amount")
 
     if mode == "bucket":
         digits = len(str(int(num))) if num >= 1 else 1

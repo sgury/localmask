@@ -47,9 +47,7 @@ def _is_text(path: str) -> bool:
     if basename in _TEXT_BASENAMES:
         return True
     # Handle .env.* variants (.env.development, .env.production, etc.)
-    if basename.startswith(".env"):
-        return True
-    return False
+    return bool(basename.startswith(".env"))
 
 
 
@@ -327,7 +325,7 @@ _NONSECRET_VALUE = re.compile(
     r"|pk_(?:live|test)_[0-9a-zA-Z]{24,}"          # Stripe publishable key (public by design)
     r"|AC[0-9a-fA-F]{32}"                           # Twilio Account SID (public identifier)
     r"|(?:postgres|postgresql|mysql|mongodb|redis|mssql|rediss)://[^\s@]{5,}$",  # DB URL without embedded creds (no @)
-    re.I)
+    re.IGNORECASE)
 _HEX_TOKEN = re.compile(r"[0-9a-fA-F]{32,}")
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
                    r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
@@ -403,7 +401,7 @@ _PUBLIC_TOOL_URL = re.compile(
     r"https?\\?://(?:[\w.-]*\.)?(?:maven\.apache\.org|services\.gradle\.org"
     r"|repo\d*\.maven|repo\.maven|jcenter\.bintray|registry\.npmjs\.org"
     r"|pypi\.org|files\.pythonhosted\.org|golang\.org|proxy\.golang\.org"
-    r"|nuget\.org|rubygems\.org|crates\.io|dl\.google\.com)", re.I)
+    r"|nuget\.org|rubygems\.org|crates\.io|dl\.google\.com)", re.IGNORECASE)
 
 
 def _looks_like_code_value(v: str) -> bool:
@@ -417,9 +415,7 @@ def _looks_like_code_value(v: str) -> bool:
         return True
     if v[:1] in ",;":                    # leading-comma code fragment
         return True
-    if _MEMBER_ACCESS.match(v):          # envVars.JWT_RESET_PASSWORD_… (code)
-        return True
-    return False
+    return bool(_MEMBER_ACCESS.match(v))  # envVars.JWT_RESET_PASSWORD_… (code)
 
 def _trim_unbalanced(v: str) -> str:
     """Strip leading openers / trailing closers whose partner isn't inside
@@ -455,7 +451,7 @@ def _infer_secret_type(value: str, context_line: str) -> tuple[str, str]:
     """Infer the secret type from the value format and surrounding context.
     Returns (type_name, reason)."""
     vl = value.lower()
-    cl = context_line.lower()
+    context_line.lower()
 
     # ── Value-based detection (what the string looks like) ───────────────
     # Connection strings
@@ -1253,9 +1249,9 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
             continue
         if dtype == "iban" and not _iban_ok(v):
             continue
-        if dtype in ("password_assignment", "declare_password", "any_env_password"):
-            if _is_word_like(v):
-                continue
+        if dtype in ("password_assignment", "declare_password", "any_env_password") \
+                and _is_word_like(v):
+            continue
         # Soft/inferred patterns (unquoted passwords, prose names, HCL/CLI
         # values) frequently match CODE rather than a literal secret — a
         # function call, a bare identifier, a {template}, or a version
@@ -1414,7 +1410,8 @@ def _scan_dir(session: dict, src_dir: str):
             try:
                 if os.path.getsize(fpath) > 500_000:
                     continue
-                content = open(fpath, errors="ignore").read()
+                with open(fpath, errors="ignore") as _f:
+                    content = _f.read()
             except Exception:
                 continue
             files[rel] = _scan_file(session, content, rel)
@@ -1434,7 +1431,8 @@ def _scan_dir(session: dict, src_dir: str):
                 try:
                     if os.path.getsize(fpath) > 500_000:
                         continue
-                    content = open(fpath, errors="ignore").read()
+                    with open(fpath, errors="ignore") as _f:
+                        content = _f.read()
                 except Exception:
                     continue
                 files[rel] = _scan_file(session, content, rel)

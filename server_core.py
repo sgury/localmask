@@ -7,27 +7,22 @@ the same scanning, review, and publishing logic without duplication.
 """
 import os
 import re
-import secrets
 import shutil
 import subprocess
 import tempfile
-import time
 from datetime import datetime, timezone
 
 # Import the engine directly from the localmask package — NOT from server.py.
 # This keeps the MCP/CLI path independent of the web layer, so the free
 # edition can ship without server.py / ui.html.
-from regex_rules_safe import RegexRulesSafe
 from localmask.state import (
-    SESSIONS, SCANS, KEYS, APP_CONFIG, NOTIFICATIONS,
-    _new_session, _summary, _gen_scan_id, _flatten_detections,
+    SESSIONS, SCANS, KEYS, APP_CONFIG, _new_session, _gen_scan_id, _flatten_detections,
     _scan_stats, _scan_to_dict, _notify,
     _persist_scan, _get_or_load_scan, _persist_masked,
     _apply_decisions_to_store,
 )
 from localmask.vault import (
-    CREDENTIALS, CRED_TTL_SECONDS,
-    _resolve_credential, _vault_encrypt, _vault_decrypt, _cred_cleanup,
+    _resolve_credential,
 )
 from localmask.gitops import _git_clone_secure, _git_push_secure, _should_publish
 from localmask.masking import _mask_text, _rehydrate
@@ -72,7 +67,8 @@ def _cfg_publish_policy() -> str:
         import json as _json
         p = os.path.expanduser("~/.localmask/config.json")
         if os.path.exists(p):
-            v = _json.load(open(p)).get("publish_policy", "review")
+            with open(p) as _f:
+                v = _json.load(_f).get("publish_policy", "review")
             return v if v in ("review", "auto") else "review"
     except Exception:
         pass
@@ -191,14 +187,15 @@ class LocalMaskEngine:
         import subprocess
         git = ["git", "-C", src_dir]
         if subprocess.run(git + ["rev-parse", "--git-dir"],
-                          capture_output=True).returncode != 0:
+                          capture_output=True, check=False).returncode != 0:
             return []  # not a git repo
         session = _new_session(src_dir, False)
         session["sensitivity"] = "standard"
 
         def _cat(h):
             return subprocess.run(git + ["cat-file", "-p", h],
-                                  capture_output=True, text=True, errors="ignore").stdout
+                                  capture_output=True, text=True, errors="ignore",
+                                  check=False).stdout
 
         # Build the exclude set: secrets that live in the CURRENT tree (HEAD).
         # A history hit that also exists at HEAD is not "removed" — skip it so we
@@ -206,7 +203,7 @@ class LocalMaskEngine:
         exclude = set(exclude_values or [])
         if exclude_values is None:
             head = subprocess.run(git + ["ls-tree", "-r", "HEAD", "--format=%(objecttype) %(objectname) %(objectsize)"],
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True, check=False)
             for ln in head.stdout.splitlines():
                 parts = ln.split()
                 if len(parts) == 3 and parts[0] == "blob" and int(parts[2]) < 500_000:
@@ -219,7 +216,7 @@ class LocalMaskEngine:
         # All blob objects (every historical file version), with type+size.
         listing = subprocess.run(
             git + ["cat-file", "--batch-all-objects", "--batch-check=%(objecttype) %(objectname) %(objectsize)"],
-            capture_output=True, text=True)
+            capture_output=True, text=True, check=False)
         blobs = []
         for ln in listing.stdout.splitlines():
             parts = ln.split()
@@ -258,7 +255,7 @@ class LocalMaskEngine:
 
         old_session = SESSIONS.get(scan.get("session_key", ""))
         source = scan["repo_url"]
-        org = scan["org"]
+        scan["org"]
         sensitivity = scan.get("summary_stats", {}).get("sensitivity", "standard")
         if old_session:
             sensitivity = old_session.get("sensitivity", sensitivity)
@@ -675,7 +672,8 @@ class LocalMaskEngine:
                     continue
                 out = os.path.join(tmp, rel)
                 os.makedirs(os.path.dirname(out) or tmp, exist_ok=True)
-                open(out, "w").write(d["masked"])
+                with open(out, "w") as _f:
+                    _f.write(d["masked"])
                 written += 1
             _git_push_secure(tmp, target_url, resolved_token, username)
             scan["status"] = "published"
@@ -782,9 +780,9 @@ class LocalMaskEngine:
 
         if not context_loaded:
             if source == "git":
-                repo_text, truncated = _load_repo_text_from_git(repo_url, git_token, max_chars)
+                repo_text, _truncated = _load_repo_text_from_git(repo_url, git_token, max_chars)
             else:
-                repo_text, truncated = _build_repo_context(session, only_findings, max_chars)
+                repo_text, _truncated = _build_repo_context(session, only_findings, max_chars)
 
             load_msg = (
                 "I'm sharing a masked repository with you. "

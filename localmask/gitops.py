@@ -134,7 +134,8 @@ def _git_push_secure(repo_dir: str, remote_url: str, token: str = "",
         # credential helper from overriding our GIT_ASKPASS token
         git_cfg_dir = tempfile.mkdtemp(prefix="lm_gitcfg_")
         empty_cfg = os.path.join(git_cfg_dir, ".gitconfig")
-        open(empty_cfg, "w").write("[credential]\n\thelper =\n")
+        with open(empty_cfg, "w") as _f:
+            _f.write("[credential]\n\thelper =\n")
         env["HOME"] = git_cfg_dir
         env["XDG_CONFIG_HOME"] = git_cfg_dir
 
@@ -217,7 +218,7 @@ def remote_repo_exists(url: str, token: str = "") -> bool | None:
             return None
     if host == "github.com" and _gh_cli_available():
         r = subprocess.run(["gh", "repo", "view", f"{owner}/{repo}"],
-                           capture_output=True, timeout=30)
+                           capture_output=True, timeout=30, check=False)
         return r.returncode == 0
     return None
 
@@ -274,7 +275,7 @@ def create_remote_repo(url: str, token: str = "", private: bool = True):
         vis = "--private" if private else "--public"
         r = subprocess.run(
             ["gh", "repo", "create", f"{owner}/{repo}", vis, "--description", desc],
-            capture_output=True, text=True, timeout=60)
+            capture_output=True, text=True, timeout=60, check=False)
         if r.returncode == 0:
             return True, ""
         return False, f"gh repo create failed: {r.stderr.strip()[:200]}"
@@ -306,7 +307,7 @@ def add_readonly_deploy_key(url: str, key_path: str,
         r = subprocess.run(
             ["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-q",
              "-C", f"localmask-ai-readonly:{owner}/{repo}"],
-            capture_output=True, text=True, timeout=60)
+            capture_output=True, text=True, timeout=60, check=False)
         if r.returncode != 0:
             return {"ok": False, "message": f"ssh-keygen failed: {r.stderr[:200]}"}
         try:
@@ -317,7 +318,7 @@ def add_readonly_deploy_key(url: str, key_path: str,
     r = subprocess.run(
         ["gh", "repo", "deploy-key", "add", pub_path,
          "--repo", f"{owner}/{repo}", "--title", title],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60, check=False)
     already = "already" in (r.stderr + r.stdout).lower()
     if r.returncode != 0 and not already:
         return {"ok": False,
@@ -345,7 +346,7 @@ def add_readonly_collaborator(url: str, username: str) -> dict:
     r = subprocess.run(
         ["gh", "api", f"repos/{owner}/{repo}/collaborators/{username}",
          "-X", "PUT", "-f", "permission=pull"],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60, check=False)
     if r.returncode != 0:
         return {"ok": False,
                 "message": f"gh add-collaborator failed: {r.stderr.strip()[:200]}"}
@@ -370,7 +371,7 @@ def set_repo_public(url: str) -> dict:
     r = subprocess.run(
         ["gh", "repo", "edit", f"{owner}/{repo}", "--visibility", "public",
          "--accept-visibility-change-consequences"],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60, check=False)
     if r.returncode != 0:
         return {"ok": False, "message": f"gh visibility change failed: "
                                         f"{r.stderr.strip()[:200]}"}
@@ -383,7 +384,7 @@ def _git_tracked_files(src_dir: str) -> list[str] | None:
     try:
         result = subprocess.run(
             ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-            cwd=src_dir, capture_output=True, timeout=30, text=True)
+            cwd=src_dir, capture_output=True, timeout=30, text=True, check=False)
         if result.returncode == 0:
             return [f for f in result.stdout.strip().split("\n") if f]
     except Exception:

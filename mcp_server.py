@@ -205,9 +205,9 @@ def _latest_scan_for_repo(path: str = "") -> str:
     for sid, sc in SCANS.items():
         repo = sc.get("repo_url", "")
         try:
-            if repo and os.path.isdir(repo) and os.path.samefile(repo, want):
-                if sc.get("created_at", "") > best_t:
-                    best, best_t = sid, sc.get("created_at", "")
+            if repo and os.path.isdir(repo) and os.path.samefile(repo, want) \
+                    and sc.get("created_at", "") > best_t:
+                best, best_t = sid, sc.get("created_at", "")
         except OSError:
             continue
     return best
@@ -394,7 +394,7 @@ def get_review_queue(scan_id: str = "") -> str:
     detections = result.get("detections", [])
 
     # Group by type
-    from collections import Counter, defaultdict
+    from collections import defaultdict
     type_groups = defaultdict(list)
     for d in detections:
         type_groups[d.get("type", "unknown")].append(d)
@@ -413,7 +413,7 @@ def get_review_queue(scan_id: str = "") -> str:
         total_pending += pending
         total_approved += approved
         total_rejected += rejected
-        files = list(set(d.get("file", "?") for d in dets))
+        files = list({d.get("file", "?") for d in dets})
 
         types.append({
             "type": dtype,

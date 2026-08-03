@@ -157,7 +157,7 @@ def _persist_scan(scan_id: str):
     try:
         with open(path, "w") as f:
             json.dump(export, f, default=str)
-    except Exception as e:
+    except Exception:
         import traceback
         traceback.print_exc()
 
