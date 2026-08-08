@@ -1,0 +1,19 @@
+{
+  "name": "localmask-remote-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LocalMask as a remote MCP server on Cloudflare Workers — full tool surface with API key auth",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "agents": "^0.0.67",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

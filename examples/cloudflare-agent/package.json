@@ -1,0 +1,19 @@
+{
+  "name": "localmask-cloudflare-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker that proxies LocalMask MCP tools over Streamable HTTP",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "agents": "^0.0.67",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

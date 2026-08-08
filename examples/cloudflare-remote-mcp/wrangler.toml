@@ -1,0 +1,24 @@
+name = "localmask-remote-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# URL of the LocalMask HTTP API backend.
+# Options:
+#   - cloudflared tunnel: https://random-words.trycloudflare.com
+#   - Hosted instance: https://localmask.your-domain.com
+#   - Cloud Run / Fly.io / Railway deployment of server.py
+LOCALMASK_API_URL = "https://your-localmask-backend.example.com"
+
+# Set secrets via:
+#   npx wrangler secret put LOCALMASK_API_KEY
+#   npx wrangler secret put MCP_AUTH_TOKEN
+
+[[durable_objects.bindings]]
+name = "MCP_OBJECT"
+class_name = "LocalMaskRemoteMCP"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LocalMaskRemoteMCP"]

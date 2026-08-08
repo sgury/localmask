@@ -1,0 +1,20 @@
+name = "localmask-agent"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Set this to your cloudflared tunnel URL or hosted LocalMask instance
+LOCALMASK_API_URL = "http://localhost:8787"
+# Allow local file paths in scan_repo (for local dev only — disable in production)
+ALLOW_LOCAL_PATHS = "true"
+
+# Set your API key via: npx wrangler secret put LOCALMASK_API_KEY
+
+[[durable_objects.bindings]]
+name = "MCP_OBJECT"
+class_name = "LocalMaskMCP"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LocalMaskMCP"]

@@ -403,6 +403,19 @@ your behalf. Add to your `.mcp.json`:
 Then your assistant can call `scan_repo`, `get_detections`, `review_detection`,
 `teach_value`, `publish_masked_repo`, and more — all locally.
 
+### Cloudflare Workers — remote MCP for teams
+
+Deploy LocalMask as a remote MCP server using a Cloudflare Worker + tunnel.
+Team members connect from any machine — no install needed:
+
+```
+Team member → Cloudflare Worker (edge) → cloudflared tunnel → LocalMask (your server)
+```
+
+Secrets never leave your server. Team members only see `~[TOKEN]~` placeholders.
+See [`examples/cloudflare-agent/`](examples/cloudflare-agent/) for the full setup,
+security model, and demo.
+
 ## How it works
 
 ```
