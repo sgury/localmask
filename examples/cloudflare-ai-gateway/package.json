@@ -1,0 +1,19 @@
+{
+  "name": "localmask-ai-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LocalMask + Cloudflare AI Gateway — two-layer security for AI code review",
+  "scripts": {
+    "dev": "wrangler dev --port 8789",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "agents": "^0.0.67",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.0.0"
+  }
+}

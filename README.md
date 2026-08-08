@@ -416,6 +416,11 @@ Secrets never leave your server. Team members only see `~[TOKEN]~` placeholders.
 See [`examples/cloudflare-agent/`](examples/cloudflare-agent/) for the full setup,
 security model, and demo.
 
+**AI Gateway integration (Pro):** Route AI calls through
+[Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) for
+DLP, caching, rate limiting, and analytics — a second safety net on top of
+LocalMask's masking. See [`examples/cloudflare-ai-gateway/`](examples/cloudflare-ai-gateway/).
+
 ## How it works
 
 ```

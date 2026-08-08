@@ -149,6 +149,11 @@ Team members do not send or see the key. The server owner pays for AI calls.
   stay on your machine behind the tunnel.
 - **ALLOW_LOCAL_PATHS**: Always set to `"false"` (or remove) in production deployments.
 
+## See also
+
+- **[AI Gateway integration (Pro)](../cloudflare-ai-gateway/)** — route AI calls through
+  Cloudflare AI Gateway for DLP, caching, rate limiting, and analytics
+
 ## Learn more
 
 - [LocalMask documentation](https://localmaskpro.com)

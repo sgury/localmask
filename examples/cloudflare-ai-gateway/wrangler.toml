@@ -1,0 +1,25 @@
+name = "localmask-ai-gateway"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# LocalMask backend (your machine via cloudflared tunnel)
+LOCALMASK_API_URL = "http://localhost:8787"
+# Allow local paths for scan_repo (local dev only — disable in production)
+ALLOW_LOCAL_PATHS = "true"
+# AI Gateway endpoint (create at: Cloudflare Dashboard → AI → AI Gateway)
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/localmask"
+
+# Set secrets via:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put AI_GATEWAY_TOKEN    (if authenticated gateway)
+#   npx wrangler secret put LOCALMASK_API_KEY   (if backend requires auth)
+
+[[durable_objects.bindings]]
+name = "MCP_OBJECT"
+class_name = "LocalMaskGatewayMCP"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LocalMaskGatewayMCP"]
