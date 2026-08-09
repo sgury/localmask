@@ -35,3 +35,9 @@ dist/build/
 vault.sqlite
 .vault_key
 .secrets/
+
+# Build artifacts
+*.egg-info/
+node_modules/
+.wrangler/
+package-lock.json

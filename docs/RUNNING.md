@@ -116,7 +116,7 @@ DistilBERT needs internet to download. After first download, you can work offlin
 ✅ Test passes? Great!
 
 → Read `README.md` for full documentation
-→ Read `SETUP.md` for detailed setup guide
+→ Read `docs/SETUP.md` for detailed setup guide
 → Try with your own repository: Edit `test_runner.py` with your path
 
 ## File Overview

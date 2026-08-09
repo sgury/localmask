@@ -303,7 +303,7 @@ LOCALMASK_MONEY_MODE=relative localmask scan .
 Only currency-anchored or finance-keyword-anchored numbers are touched — bare
 numbers (ports, versions, IDs) never are. The vocabulary is editable in
 `regex_patterns.json` (add your own domain terms, no code). Full details and
-the honest threat model: [FINANCE.md](FINANCE.md).
+the honest threat model: [FINANCE.md](docs/FINANCE.md).
 
 Finance Mode is **free and open source**. Locking the mode org-wide is Pro / Team.
 

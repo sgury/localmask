@@ -1953,7 +1953,7 @@ AI answers are re-hydrated back to real numbers locally.
 The protection level is one uniform choice per scan: in relative mode
 everything is relative (uncategorized amounts use the generic R_AMOUNT
 base); for full opacity choose token or bucket for the whole scan.
-Full details: FINANCE.md""")
+Full details: docs/FINANCE.md""")
         return
 
     if args.command == "feedback":
