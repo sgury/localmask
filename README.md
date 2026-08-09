@@ -9,15 +9,10 @@ Using Cursor, Copilot, Claude, or ChatGPT? Your API keys, passwords, tokens, and
 **GDPR-ready** — supports Data Protection by Design (Article 25) and Data Minimization (Article 5). PII never leaves your machine. [Read the DPIA](https://localmaskpro.com/gdpr).
 
 The free edition is open source and runs entirely offline: 350+ detection patterns
-across a regex engine + entropy detection, masking + rehydrate, a publishable masked
-repo, git sync, and a CLI + MCP server. No AI model, no cloud, no account.
-
-> Want an AI model that catches what patterns miss and learns from your
-> corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) —
-> a masking stage in front of your AI (or your company's AI gateway), so
-> compliance sees clean prompts and stops blocking developers, and a
-> **team-shared vault** so everyone gets consistent tokens?
-> See [LocalMask Pro](https://localmaskpro.com).
+across a regex engine + entropy detection, masking + rehydrate, review and approve workflow,
+a publishable masked repo, git sync, CLI + MCP server, and
+[IDE extensions](https://marketplace.visualstudio.com/items?itemName=localmask.localmask-key-toggle).
+No AI model, no cloud, no account.
 
 ### Integrations
 
@@ -440,6 +435,13 @@ your repo ──▶ regex + entropy detection ──▶ mask to ~[TOKEN]~ ──
 ```
 
 Everything is local. There is no telemetry and no network call in the free edition.
+
+> Want an AI model that catches what patterns miss and learns from your
+> corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) —
+> a masking stage in front of your AI (or your company's AI gateway), so
+> compliance sees clean prompts and stops blocking developers, and a
+> **team-shared vault** so everyone gets consistent tokens?
+> See [LocalMask Pro](https://localmaskpro.com).
 
 ## What's in Free vs Pro
 
