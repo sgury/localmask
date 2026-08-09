@@ -6,6 +6,16 @@ Using Cursor, Copilot, Claude, or ChatGPT? Your API keys, passwords, tokens, and
 
 ![LocalMask](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-film.gif)
 
+### How it works
+
+```
+your repo ──▶ regex + entropy detection ──▶ mask to ~[TOKEN]~ ──▶ masked copy
+                                               │
+                                               └── local vault maps tokens ⇄ real values
+```
+
+Everything is local. There is no telemetry and no network call in the free edition.
+
 ### Integrations
 
 | | |
@@ -425,16 +435,6 @@ security model, and demo.
 [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) for
 DLP, caching, rate limiting, and analytics — a second safety net on top of
 LocalMask's masking. See [`examples/cloudflare-ai-gateway/`](examples/cloudflare-ai-gateway/).
-
-## How it works
-
-```
-your repo ──▶ regex + entropy detection ──▶ mask to ~[TOKEN]~ ──▶ masked copy
-                                               │
-                                               └── local vault maps tokens ⇄ real values
-```
-
-Everything is local. There is no telemetry and no network call in the free edition.
 
 > Want an AI model that catches what patterns miss and learns from your
 > corrections, a web dashboard, the [AI proxy](https://localmaskpro.com) —
