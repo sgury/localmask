@@ -4,6 +4,8 @@
 
 Using Cursor, Copilot, Claude, or ChatGPT? Your API keys, passwords, tokens, and PII are sent to external servers with every prompt. LocalMask stops this. It scans your repo, replaces every secret with a safe placeholder like `~[DATABASE_PASSWORD_0]~`, and lets the AI work with tokens instead of real values. When the AI returns code, LocalMask restores the real values — locally.
 
+![LocalMask](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-film.gif)
+
 **GDPR-ready** — supports Data Protection by Design (Article 25) and Data Minimization (Article 5). PII never leaves your machine. [Read the DPIA](https://localmaskpro.com/gdpr).
 
 The free edition is open source and runs entirely offline: 350+ detection patterns
@@ -16,8 +18,6 @@ repo, git sync, and a CLI + MCP server. No AI model, no cloud, no account.
 > compliance sees clean prompts and stops blocking developers, and a
 > **team-shared vault** so everyone gets consistent tokens?
 > See [LocalMask Pro](https://localmaskpro.com).
-
-![LocalMask](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-film.gif)
 
 ### Integrations
 
