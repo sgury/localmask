@@ -17,6 +17,8 @@ repo, git sync, and a CLI + MCP server. No AI model, no cloud, no account.
 > **team-shared vault** so everyone gets consistent tokens?
 > See [LocalMask Pro](https://localmaskpro.com).
 
+https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-ad-final.mp4
+
 ### Integrations
 
 | | |
