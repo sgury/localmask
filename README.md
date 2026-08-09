@@ -463,17 +463,6 @@ LocalMask's masking. See [`examples/cloudflare-ai-gateway/`](examples/cloudflare
 | Team-shared vault (consistent tokens across machines) | — | — | ✓ |
 | Org shared rules · LDAP/AD · SSO | — | — | ✓ |
 
-## Detection accuracy
-
-Benchmarked against real-world datasets:
-
-- **CredData** (Samsung, 297 repos, 4,583 labeled credentials): F1 **42%** — ahead of
-  gitleaks (33%), truffleHog3 (24%), detect-secrets (21%) on the same corpus.
-- **AI4Privacy** (2,000 validation samples, 17 PII types): F1 **61.6%** — 100% precision
-  on email, phone, credit card; recall gaps on international ID formats.
-
-Full methodology and per-category breakdowns: [BENCHMARK-REAL-CORPUS.md](docs/BENCHMARK-REAL-CORPUS.md).
-
 ## Feedback
 
 Found a false positive, a missed secret, or have a feature request?
