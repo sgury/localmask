@@ -1,6 +1,6 @@
 # LocalMask — Protect Your Code from AI
 
-**Scan, mask, and rehydrate — keep your secrets out of AI prompts.**
+**Scan, mask and rehydrate — keep your secrets out of AI prompts.**
 
 Using Cursor, Copilot, Claude, or ChatGPT? Your API keys, passwords, tokens, and PII are sent to external servers with every prompt. LocalMask stops this — it scans your repo, replaces every secret with a safe placeholder like `~[DATABASE_PASSWORD_0]~`, and lets the AI work with tokens instead of real values. When the AI returns code, LocalMask restores the real values locally. Nothing ever leaves your machine.
 
