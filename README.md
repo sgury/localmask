@@ -17,10 +17,6 @@ repo, git sync, and a CLI + MCP server. No AI model, no cloud, no account.
 > **team-shared vault** so everyone gets consistent tokens?
 > See [LocalMask Pro](https://localmaskpro.com).
 
-### Demo
-
-https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-full-demo.mp4
-
 ### Integrations
 
 | | |
@@ -28,7 +24,6 @@ https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-full-demo.mp4
 | **IDE** | [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=localmask.localmask-key-toggle) · [JetBrains Plugin](https://plugins.jetbrains.com/plugin/33216) |
 | **Cloudflare** | [Remote MCP Server](examples/cloudflare-agent/) (Workers + Durable Objects) · [AI Gateway](examples/cloudflare-ai-gateway/) (Pro) |
 | **CLI & MCP** | `pip install localmask` · [MCP server setup](#use-it-inside-your-ai-editor-mcp) |
-| **Videos** | [Full Demo](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-full-demo.mp4) · [CLI](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-cli-demo.mp4) · [MCP Server](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-mcp-demo.mp4) |
 
 ---
 
