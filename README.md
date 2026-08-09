@@ -403,8 +403,8 @@ your behalf. Add to your `.mcp.json`:
 {
   "mcpServers": {
     "localmask": {
-      "command": "python3",
-      "args": ["-m", "mcp_server"]
+      "command": "~/.localmask/venv/bin/python",
+      "args": ["~/.localmask/mcp_server.py"]
     }
   }
 }

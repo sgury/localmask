@@ -65,7 +65,7 @@ Add this to your IDE's MCP config (Cursor `~/.cursor/mcp.json`, Claude Desktop
 {
   "mcpServers": {
     "localmask": {
-      "command": "~/.localmask/venv/bin/python3",
+      "command": "~/.localmask/venv/bin/python",
       "args": ["~/.localmask/mcp_server.py"]
     }
   }
@@ -117,7 +117,7 @@ Zed speaks MCP natively — no extension needed. Add to `~/.config/zed/settings.
   "context_servers": {
     "localmask": {
       "command": {
-        "path": "~/.localmask/venv/bin/python3",
+        "path": "~/.localmask/venv/bin/python",
         "args": ["~/.localmask/mcp_server.py"]
       }
     }

@@ -41,7 +41,7 @@ get working code with every secret replaced by a stable `~[TOKEN]~`.
 MCP (inside AI editors): add to `.mcp.json`:
 
 ```json
-{ "mcpServers": { "localmask": { "command": "python3", "args": ["-m", "mcp_server"] } } }
+{ "mcpServers": { "localmask": { "command": "~/.localmask/venv/bin/python", "args": ["~/.localmask/mcp_server.py"] } } }
 ```
 
 ## Pro edition

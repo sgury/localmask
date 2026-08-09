@@ -39,12 +39,16 @@ echo ""
 
 echo -e "${BOLD}[1/6] Checking prerequisites...${RESET}"
 
-# Python
-if ! command -v python3 &> /dev/null; then
+# Python — find python3 or python (Windows often only has 'python')
+if command -v python3 &> /dev/null; then
+    PY=python3
+elif command -v python &> /dev/null; then
+    PY=python
+else
     echo -e "${RED}✗ Python 3 not found. Install from https://python.org${RESET}"
     exit 1
 fi
-PY_VER=$(python3 --version 2>&1)
+PY_VER=$($PY --version 2>&1)
 echo -e "  ${GREEN}✓${RESET} $PY_VER"
 
 # Git
@@ -95,7 +99,7 @@ echo -e "  ${GREEN}✓${RESET} Ollama running"
 
 echo -e "\n${BOLD}[3/6] Pulling detection model (qwen2.5:7b)...${RESET}"
 
-MODELS=$(curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; print(' '.join(m['name'] for m in json.load(sys.stdin).get('models',[])))" 2>/dev/null)
+MODELS=$(curl -s http://localhost:11434/api/tags | $PY -c "import sys,json; print(' '.join(m['name'] for m in json.load(sys.stdin).get('models',[])))" 2>/dev/null)
 
 if echo "$MODELS" | grep -q "qwen2.5:7b"; then
     echo -e "  ${GREEN}✓${RESET} qwen2.5:7b already available"
@@ -135,7 +139,7 @@ echo -e "  ${GREEN}✓${RESET} Files copied to $INSTALL_DIR"
 # Create venv and install deps
 if [ ! -d "$VENV_DIR" ]; then
     echo -e "  ${DIM}Creating virtual environment...${RESET}"
-    python3 -m venv "$VENV_DIR"
+    $PY -m venv "$VENV_DIR"
 fi
 
 echo -e "  ${DIM}Installing Python dependencies...${RESET}"
@@ -180,7 +184,7 @@ CLAUDE_CONFIG_DIR="$HOME/Library/Application Support/Claude"
 if [ -d "$CLAUDE_CONFIG_DIR" ]; then
     CLAUDE_CONFIG="$CLAUDE_CONFIG_DIR/claude_desktop_config.json"
     if [ -f "$CLAUDE_CONFIG" ]; then
-        python3 -c "
+        $PY -c "
 import json
 with open('$CLAUDE_CONFIG') as f:
     cfg = json.load(f)
@@ -224,7 +228,7 @@ if [ -d "$CURSOR_CONFIG_DIR" ] || command -v cursor &>/dev/null; then
     mkdir -p "$CURSOR_CONFIG_DIR"
     CURSOR_MCP="$CURSOR_CONFIG_DIR/mcp.json"
     if [ -f "$CURSOR_MCP" ]; then
-        python3 -c "
+        $PY -c "
 import json
 with open('$CURSOR_MCP') as f:
     cfg = json.load(f)
@@ -271,7 +275,7 @@ echo -e "  ${DIM}  Copy to any project: cp ~/.localmask/.mcp.json ./your-project
 WINDSURF_DIR="$HOME/.codeium/windsurf"
 if [ -d "$WINDSURF_DIR" ]; then
     WINDSURF_MCP="$WINDSURF_DIR/mcp_config.json"
-    python3 -c "
+    $PY -c "
 import json, os
 path = '$WINDSURF_MCP'
 cfg = {}
@@ -301,7 +305,7 @@ if [ -n "$LOCALMASK_SERVER" ]; then
 
     # Update Claude Desktop config
     if [ -f "$CLAUDE_CONFIG" ]; then
-        python3 -c "
+        $PY -c "
 import json
 with open('$CLAUDE_CONFIG') as f:
     cfg = json.load(f)
@@ -351,7 +355,19 @@ echo -e "\n${BOLD}[7/7] Creating CLI shortcut...${RESET}"
 cat > "$INSTALL_DIR/localmask" << 'SEOF'
 #!/bin/bash
 INSTALL_DIR="$HOME/.localmask"
-"$INSTALL_DIR/venv/bin/python3" "$INSTALL_DIR/cli.py" "$@"
+# Prefer venv python; fall back to system python3 or python
+if [ -x "$INSTALL_DIR/venv/bin/python3" ]; then
+    "$INSTALL_DIR/venv/bin/python3" "$INSTALL_DIR/cli.py" "$@"
+elif [ -x "$INSTALL_DIR/venv/bin/python" ]; then
+    "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/cli.py" "$@"
+elif command -v python3 &>/dev/null; then
+    python3 "$INSTALL_DIR/cli.py" "$@"
+elif command -v python &>/dev/null; then
+    python "$INSTALL_DIR/cli.py" "$@"
+else
+    echo "Error: Python not found. Install Python 3 first."
+    exit 1
+fi
 SEOF
 chmod +x "$INSTALL_DIR/localmask"
 

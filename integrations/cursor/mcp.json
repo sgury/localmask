@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "localmask": {
-      "command": "python3",
+      "command": "${HOME}/.localmask/venv/bin/python",
       "args": ["${HOME}/.localmask/mcp_server.py"],
       "env": {}
     }
