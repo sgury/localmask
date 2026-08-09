@@ -23,7 +23,7 @@ repo, git sync, and a CLI + MCP server. No AI model, no cloud, no account.
 
 | | |
 |---|---|
-| **IDE** | [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=localmask.localmask-key-toggle) · [JetBrains Plugin](https://plugins.jetbrains.com/plugin/33216) |
+| **IDE** | [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=localmask.localmask-key-toggle) · [JetBrains Plugin](https://plugins.jetbrains.com/plugin/33216-localmask) |
 | **Cloudflare** | [Remote MCP Server](examples/cloudflare-agent/) (Workers + Durable Objects) · [AI Gateway](examples/cloudflare-ai-gateway/) (Pro) |
 | **CLI & MCP** | `pip install localmask` · [MCP server setup](#use-it-inside-your-ai-editor-mcp) |
 
@@ -470,7 +470,7 @@ Benchmarked against real-world datasets:
 - **AI4Privacy** (2,000 validation samples, 17 PII types): F1 **61.6%** — 100% precision
   on email, phone, credit card; recall gaps on international ID formats.
 
-Full methodology and per-category breakdowns: [BENCHMARK-REAL-CORPUS.md](BENCHMARK-REAL-CORPUS.md).
+Full methodology and per-category breakdowns: [BENCHMARK-REAL-CORPUS.md](docs/BENCHMARK-REAL-CORPUS.md).
 
 ## Feedback
 
