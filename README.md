@@ -6,14 +6,6 @@ Using Cursor, Copilot, Claude, or ChatGPT? Your API keys, passwords, tokens, and
 
 ![LocalMask](https://pub-f831b98f7caf40448f48e2d915075959.r2.dev/localmask-film.gif)
 
-**GDPR-ready** — supports Data Protection by Design (Article 25) and Data Minimization (Article 5). PII never leaves your machine. [Read the DPIA](https://localmaskpro.com/gdpr).
-
-The free edition is open source and runs entirely offline: 350+ detection patterns
-across a regex engine + entropy detection, masking + rehydrate, review and approve workflow,
-a publishable masked repo, git sync, CLI + MCP server, and
-[IDE extensions](https://marketplace.visualstudio.com/items?itemName=localmask.localmask-key-toggle).
-No AI model, no cloud, no account.
-
 ### Integrations
 
 | | |
@@ -23,6 +15,14 @@ No AI model, no cloud, no account.
 | **CLI & MCP** | `pip install localmask` · [MCP server setup](#use-it-inside-your-ai-editor-mcp) |
 
 ---
+
+**GDPR-ready** — supports Data Protection by Design (Article 25) and Data Minimization (Article 5). PII never leaves your machine. [Read the DPIA](https://localmaskpro.com/gdpr).
+
+The free edition is open source and runs entirely offline: 350+ detection patterns
+across a regex engine + entropy detection, masking + rehydrate, review and approve workflow,
+a publishable masked repo, git sync, CLI + MCP server, and
+[IDE extensions](https://marketplace.visualstudio.com/items?itemName=localmask.localmask-key-toggle).
+No AI model, no cloud, no account.
 
 ## Install
 
