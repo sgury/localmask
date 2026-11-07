@@ -1438,10 +1438,22 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         # the guard normally protects (found: teaching a value that appears in
         # an XML name attribute silently did nothing — guard protected it,
         # then the token-absent check dropped the finding).
-        if det.get("type", "") in RegexRulesSafe.DIRECT_MASK \
+        if det.get("type", "") == "private_key_header":
+            # Replace the entire PEM block: header + base64 body + footer.
+            # The pattern only captures the BEGIN header; masking just the
+            # header left the key material itself in the output (regression
+            # vs 0.9.6, caught by red-team round 2). Swallow everything up to
+            # and including the matching END marker; if there is no END
+            # (truncated paste), take the base64 body lines that follow.
+            pem_full = re.escape(value) + r"[\s\S]*?-----END[^\-\n]*-----"
+            if re.search(pem_full, masked):
+                masked = re.sub(pem_full, token, masked)
+            else:
+                masked = re.sub(re.escape(value)
+                                + r"(?:\r?\n[A-Za-z0-9+/=]{16,})*", token, masked)
+        elif det.get("type", "") in RegexRulesSafe.DIRECT_MASK \
                 or det.get("pattern_reason", "") == "user_taught" \
-                or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key",
-                                           "private_key_header"):
+                or det.get("type", "") in ("base64_encoded_secret", "fcm_server_key"):
             # Direct mask skips the key-position guard but still must respect
             # token boundaries — replacing the value inside a longer blob
             # (hex/base64 that happens to contain it) corrupts the blob.
