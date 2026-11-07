@@ -390,11 +390,30 @@ _SOFT_VALUE_TYPES = {
     "any_env_token", "email_credential", "prose_db_name",
     "prose_server_name", "prose_generic_key", "prose_token",
     "tf_hcl_username", "cli_mysql_password", "cli_password",
+    "env_secret_suffix", "api_key_unquoted",
 }
 _CODE_CALL = re.compile(r"[A-Za-z_]\w*\s*\(")   # func call: foo(
 _VERSION_CONSTRAINT = re.compile(r"[<>=!]=?\s*\d")  # >=2, <4, ==1.0
 _MEMBER_ACCESS = re.compile(r"^[A-Za-z_]\w*(?:\.\w+)+[,;)]?$")  # envVars.X,
 _URL_ENCODED = re.compile(r"%[0-9A-Fa-f]{2}")   # %2F, %23 URL-encoding
+# Credential types whose values are legitimately URL-encoded (P%40ssw0rd in
+# a DSN, %2F in an AWS secret, %3A in a SAS token). The generic "≥2 %XX →
+# test string" noise rule must not drop these.
+_PCT_OK_TYPES = {
+    "url_embedded_password", "aws_secret_key", "azure_storage_account_key",
+    "azure_sas_signature", "azure_sas_token", "env_secret_suffix",
+    "api_key_unquoted", "connstr_password_inline", "password_assignment",
+    "password_unquoted", "url_query_secret", "db_connection_url",
+}
+# Zero-width / invisible chars inserted to split a secret so regexes miss it
+# (sk-<ZWSP>proj-…). Stripped from content before any layer runs.
+_ZW_CHARS = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad]")
+# An unlabeled 9-digit Israeli ID is flagged only when the line is Hebrew or
+# names an ID-like field: a bare checksum pass alone is ~10% of all 9-digit
+# numbers (order ids, invoice numbers).
+_IL_ID_CONTEXT = re.compile(
+    r"[\u05d0-\u05ea]|(?i:id[_\s-]?(?:num|no)|national[_\s-]?id|\btz\b|teudat|zehut"
+    r"|tax[_\s-]?id|israeli|passport|customer[_\s-]?id|client[_\s-]?id)")
 # Well-known public build/tooling hosts — their URLs are never secrets.
 # `\\?://` tolerates the properties-file escaped colon (https\://).
 _PUBLIC_TOOL_URL = re.compile(
@@ -618,13 +637,24 @@ def _scan_base64_secrets(content: str, file_ext: str,
                                            "phone_us", "credit_card")]
         # (b) or the blob sits in a secret-named field.
         ctx = _B64_SECRET_CTX.search(line)
-        if not strong and not ctx:
+        # (c) the plaintext is a basic-auth pair (user:password) or starts
+        #     with a well-known key prefix too short for its vendor regex.
+        plain = decoded.strip()
+        basic = bool(re.fullmatch(r"[\w.\-@]{2,64}:[^\s:]{6,128}", plain)) \
+            and any(c.isdigit() or not c.isalnum()
+                    for c in plain.split(":", 1)[1])
+        prefixed = bool(re.match(r"(?:sk-|sk_|rk_|ghp_|gho_|ghs_|github_pat_"
+                                 r"|xox[abpr]-|AKIA|AIza|glpat-|hf_)", plain))
+        if not strong and not ctx and not basic and not prefixed:
             continue
         why = (f"base64 decodes to {strong[0].get('type')}" if strong
+               else "base64 decodes to user:password" if basic
+               else "base64 decodes to a prefixed API key" if prefixed
                else "base64 value in a secret field")
         results.append({
             "entity": blob, "type": "base64_encoded_secret",
-            "confidence": 0.9 if strong else 0.8, "level": "standard",
+            "confidence": 0.9 if (strong or basic or prefixed) else 0.8,
+            "level": "standard",
             "line": line_no, "context": line.strip()[:120],
             "file_type": file_ext, "pattern_reason": why,
         })
@@ -831,11 +861,27 @@ _CSV_PII_COLUMNS = {
     "payment":     "money_value",
     "revenue":     "money_value",
     "cost":        "money_value",
+    "national_id": "national_id",
+    "id_number":   "national_id",
+    "teudat":      "national_id",
+    "zehut":       "national_id",
+    "tz":          "national_id",
+    # Hebrew headers (normalised keeps Hebrew letters)
+    "שם":          "person_name",
+    "טלפון":       "phone",
+    "נייד":        "phone",
+    "זהות":        "national_id",
+    "תז":          "national_id",
+    "דרכון":       "national_id",
+    "כתובת":       "street_address",
+    "חשבון":       "bank_account",
+    "מייל":        "email",
+    "דואל":        "email",
 }
 
 # Short/ambiguous keywords match only as a whole underscore-segment of the
 # header ("sum" must not fire on "summary", "pan" not on "company").
-_CSV_SEGMENT_ONLY = {"sum", "pan", "dob", "cost"}
+_CSV_SEGMENT_ONLY = {"sum", "pan", "dob", "cost", "tz"}
 
 # Header names that contain a PII keyword but are NOT PII (e.g. "hostname"
 # contains "name" — but a data-extract "hostname" column is infra, mask it
@@ -941,6 +987,83 @@ def _infer_column_type(samples: list, sensitivity: str, ner,
     return "", None
 
 
+def _csv_norm(col: str) -> str:
+    """Normalise a column name for keyword matching; keeps Hebrew letters
+    (שם / טלפון / ת"ז) and drops quotes so ת"ז → תז."""
+    col = col.strip().strip("[]`'\"").lower().replace('"', "").replace("״", "")
+    return re.sub(r"[^a-z0-9_\u05d0-\u05ea]", "_", col)
+
+
+def _pii_column_type(col: str) -> str:
+    norm = _csv_norm(col)
+    if norm in _CSV_COLUMN_SKIP:
+        return ""
+    segments = set(norm.split("_"))
+    for kw, sem in _CSV_PII_COLUMNS.items():
+        if (kw in segments) if kw in _CSV_SEGMENT_ONLY else (kw in norm):
+            return sem
+    return ""
+
+
+_SQL_INSERT = re.compile(
+    r"(?is)INSERT\s+INTO\s+[\w.\[\]\"`]+\s*\(([^)]*)\)\s*VALUES\s*(.+?)(?:;|$)")
+_SQL_TUPLE = re.compile(r"\(((?:[^()']|'(?:[^']|'')*')*)\)")
+_SQL_VALUE = re.compile(r"N?'((?:[^']|'')*)'|([^,\s][^,]*)")
+
+
+def _scan_sql_inserts(content: str, already_found: list) -> list:
+    """Column-aware masking for SQL INSERT statements in any file/prompt:
+    INSERT INTO users (id_number, full_name, phone) VALUES ('2381…', 'משה כהן', …)
+    The column name declares what the value is — same principle as the CSV
+    layer — so a Hebrew name or an unlabeled ID can't slip through on NER or
+    checksum recall (seed data, DWH scripts, test dumps pasted into a chat)."""
+    have = {d.get("entity") for d in already_found}
+    out, seen = [], set()
+    for m in _SQL_INSERT.finditer(content):
+        cols = [c.strip() for c in m.group(1).split(",")]
+        for t in _SQL_TUPLE.finditer(m.group(2)):
+            vals = [(v.group(1) if v.group(1) is not None else (v.group(2) or ""))
+                    .strip().replace("''", "'")
+                    for v in _SQL_VALUE.finditer(t.group(1))]
+            for col, v in zip(cols, vals):
+                sem = _pii_column_type(col)
+                if not sem or sem == "money_value" or len(v) < 2 \
+                        or v.upper() == "NULL" or v in have or v in seen:
+                    continue
+                seen.add(v)
+                out.append({"entity": v, "type": f"sql_{sem}",
+                            "confidence": 0.95, "level": "standard",
+                            "pattern_reason": f"sql_column:{col}",
+                            "file_type": "sql"})
+    return out
+
+
+_CSV_CELL_OK = re.compile(r"^[\w\s\"'״׳.]{1,40}$")
+
+
+def _embedded_csv_block(content: str) -> str:
+    """A CSV table pasted inside free text (a prompt, a .txt, a log): the first
+    header row whose cells are all identifier-like, ≥1 is a known PII column,
+    and the next line has the same number of cells. Returns the block up to
+    the first blank line, or "" — prose with commas never qualifies."""
+    lines = content.split("\n")
+    for i, ln in enumerate(lines[:-1]):
+        cells = ln.split(",")
+        if len(cells) < 2 or not all(_CSV_CELL_OK.match(c.strip()) for c in cells):
+            continue
+        if not any(_pii_column_type(c) for c in cells):
+            continue
+        if len(lines[i + 1].split(",")) != len(cells):
+            continue
+        block = []
+        for b in lines[i:]:
+            if not b.strip():
+                break
+            block.append(b)
+        return "\n".join(block)
+    return ""
+
+
 def _scan_csv_columns(content: str, file_ext: str,
                       sensitivity: str = "standard", ner=None,
                       use_llm: bool = True) -> list:
@@ -965,7 +1088,7 @@ def _scan_csv_columns(content: str, file_ext: str,
     sensitive: dict = {}          # column index → semantic type
     span_cols: dict = {}          # column index → {value: [sensitive spans]}
     for idx, col in enumerate(header):
-        norm = re.sub(r"[^a-z0-9_]", "_", col.lower())
+        norm = _csv_norm(col)
         if norm in _CSV_COLUMN_SKIP:
             continue
         segments = set(norm.split("_"))
@@ -1053,6 +1176,11 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
     sensitivity = session.get("sensitivity", "standard")
     file_ext = os.path.splitext(rel_path)[1].lstrip(".") or "txt"
 
+    # ── Layer 0: normalise evasions ──────────────────────────────────────
+    # Zero-width chars inside a secret break every regex and carry no
+    # meaning in code or prose — drop them before any layer runs.
+    content = _ZW_CHARS.sub("", content)
+
     # ── Layer 1: Regex ───────────────────────────────────────────────────
     raw_detections = RegexRulesSafe.scan_file(rel_path, content, sensitivity)
 
@@ -1086,6 +1214,17 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         raw_detections.extend(
             _scan_csv_columns(content, file_ext, sensitivity, ner,
                               use_llm=not session.get("skip_llm")))
+    else:
+        # A CSV table pasted into a prompt / text file gets the same
+        # column-name treatment (header names only, no value inference).
+        _block = _embedded_csv_block(content)
+        if _block:
+            raw_detections.extend(
+                _scan_csv_columns(_block, "csv", sensitivity, None,
+                                  use_llm=False))
+
+    # ── Layer 2c: SQL INSERT column-name PII ─────────────────────────────
+    raw_detections.extend(_scan_sql_inserts(content, raw_detections))
 
     # ── Layer 3: Entropy-based secret scanner ─────────────────────────────
     # NB: the entropy scanner MUTATES the set it's given (adds each value it
@@ -1224,8 +1363,9 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
         #  · URL-encoded test strings       → Some%2FOther, slash%%2Fgordon
         #  · public build/tooling URLs      → maven/gradle/apache download URLs
         if v.startswith(("#/", "#/components")) \
-                or len(_URL_ENCODED.findall(v)) >= 2 or "%%" in v \
-                or _PUBLIC_TOOL_URL.search(v):
+                or (len(_URL_ENCODED.findall(v)) >= 2
+                    and d.get("type", "") not in _PCT_OK_TYPES) \
+                or "%%" in v or _PUBLIC_TOOL_URL.search(v):
             continue
         # Broad infra inferences (any http(s) URL → internal_url, generic
         # hostnames) are PII/infra, not credentials. Per the sensitivity model
@@ -1241,7 +1381,11 @@ def _scan_file(session: dict, content: str, rel_path: str) -> dict:
             continue
         # Checksum-validated national IDs (lang packs): a keyword-adjacent
         # number that fails the check digit is an order id / random number.
-        if dtype == "israeli_id" and not _israeli_id_ok(v):
+        if dtype in ("israeli_id", "israeli_id_bare", "israeli_company_id") \
+                and not _israeli_id_ok(v):
+            continue
+        if dtype == "israeli_id_bare" \
+                and not _IL_ID_CONTEXT.search(d.get("context", "")):
             continue
         if dtype == "spanish_dni" and not _dni_ok(v):
             continue

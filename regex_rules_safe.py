@@ -245,6 +245,7 @@ class RegexRulesSafe:
         "generic_api_key", "password_assignment", "password_unquoted",
         "unquoted_env_secret", "any_env_password", "any_env_secret",
         "any_env_token", "tf_hcl_secret", "java_properties_password",
+        "env_secret_suffix", "api_key_unquoted",
         # Language hardcoded-secret matchers (secret|password|token|api_key =
         # "…") are equally prone to placeholders (YOUR_API_KEY_HERE, xxxx…,
         # your-secret-key) — gate their values too.

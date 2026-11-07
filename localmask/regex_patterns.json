@@ -664,7 +664,7 @@
    "reason": "Server hostname (PRD/STG/DEV prefix)"
   },
   "connstr_password_inline": {
-   "pattern": "(?i)(?<![A-Za-z0-9])Password\\s*=\\s*([^;\\s'\\\"<>]{6,})\\s*;",
+   "pattern": "(?i)(?<![A-Za-z0-9])(?:Password|Pwd)\\s*=\\s*([^;\\s'\\\"<>]{6,})\\s*(?=;|$|\\s)",
    "confidence": 0.97,
    "level": "minimal",
    "reason": "Password in semicolon-delimited connection string"
@@ -982,7 +982,7 @@
    "reason": "credit card number"
   },
   "labeled_cvv": {
-   "pattern": "(?i)(?:cvv2?|cvc2?|security[_\\s\\-]?code|card[_\\s\\-]?verification[_\\s\\-]?(?:value|code|number)?|ccv|cid|card[_\\s\\-]?(?:security[_\\s\\-]?)?pin|atm[_\\s\\-]?pin|pin[_\\s\\-]?(?:number|no\\.?))\\s*[:=]\\s*[\"']?(\\d{3,6})[\"']?",
+   "pattern": "(?i)(?:cvv2?|cvc2?|security[_\\s\\-]?code|card[_\\s\\-]?verification[_\\s\\-]?(?:value|code|number)?|ccv|cid|card[_\\s\\-]?(?:security[_\\s\\-]?)?pin|atm[_\\s\\-]?pin|pin[_\\s\\-]?(?:number|no\\.?)|קוד\\s*(?:אבטחה|אימות)|ספרות\\s*(?:ביטחון|אבטחה))\\s*[:=]?\\s*[\\\"']?(\\d{3,4})(?!\\d)[\\\"']?",
    "confidence": 0.91,
    "level": "standard",
    "reason": "Card CVV/CVC security code (3-4 digits) — keyword-anchored on cvv/cvc/security_code to prevent FP on arbitrary 3-digit values (PCI DSS)"
@@ -1144,6 +1144,48 @@
    "confidence": 0.9,
    "level": "standard",
    "reason": "finance-column numeric assignment (salary/amount/balance)"
+  },
+  "azure_storage_account_key": {
+   "pattern": "(?i)(?<![A-Za-z0-9])AccountKey\\s*=\\s*([A-Za-z0-9+/]{20,}={0,2})",
+   "confidence": 0.99,
+   "level": "minimal",
+   "reason": "Azure Storage account key (connection string AccountKey=)"
+  },
+  "azure_sas_signature": {
+   "pattern": "(?i)[?&]sig=([A-Za-z0-9%+/=]{16,})",
+   "confidence": 0.97,
+   "level": "minimal",
+   "reason": "Azure SAS token signature (sig= query parameter)"
+  },
+  "azure_devops_pat": {
+   "pattern": "(?i)(?:AZURE_DEVOPS_EXT_PAT|AZURE_DEVOPS_PAT|AZDO_PAT|ADO_PAT|SYSTEM_ACCESSTOKEN)\\s*[:=]\\s*[\\\"']?([a-z0-9]{52})(?![a-z0-9])",
+   "confidence": 0.98,
+   "level": "minimal",
+   "reason": "Azure DevOps personal access token"
+  },
+  "env_secret_suffix": {
+   "pattern": "(?<![\\w-])(?-i:[A-Z][A-Z0-9_]*(?:_PAT|_TOKEN|_SECRET|_SEED|PRIVATE_KEY|_API_KEY|_APIKEY|_ACCESS_KEY|PASSWORD|PASSWD|_PWD))\\s*=\\s*[\\\"']?(?!os\\.|process\\.env|getenv|\\$|%|<)([^\\s\\\"'#;&]{8,})",
+   "confidence": 0.9,
+   "level": "minimal",
+   "reason": "Secret-named UPPERCASE env var / -e flag (NAME_TOKEN=..., DB_PASSWORD=...)"
+  },
+  "api_key_unquoted": {
+   "pattern": "(?i)(?<![\\w-])(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|client[_-]?secret)\\s*[:=]\\s*(?!os\\.|process\\.)(?=[A-Za-z0-9_\\-.]*\\d)([A-Za-z0-9_\\-.]{16,})",
+   "confidence": 0.9,
+   "level": "minimal",
+   "reason": "Unquoted api_key=/access_token= value (logs, error messages, query strings)"
+  },
+  "http_basic_auth": {
+   "pattern": "(?i)Authorization\\s*:\\s*Basic\\s+([A-Za-z0-9+/]{8,}={0,2})",
+   "confidence": 0.97,
+   "level": "minimal",
+   "reason": "HTTP Basic auth header (base64 user:password)"
+  },
+  "xml_sensitive_element": {
+   "pattern": "(?i)<(?:[\\w-]+:)?(?:password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret|passport(?:[_-]?(?:no|number))?|national[_-]?id|id[_-]?number|tax[_-]?id|ssn|iban|account[_-]?number|card[_-]?number)\\b[^>]*>([^<]{3,200})</",
+   "confidence": 0.95,
+   "level": "standard",
+   "reason": "Sensitive value inside an XML/SOAP element (<wsse:Password>, <tax_id>, <passport>...)"
   }
  },
  "file_type_extra": {
@@ -2354,13 +2396,13 @@
   "_comment": "Language packs — PII/secret patterns keyed by non-English keywords (Hebrew, Russian, Arabic, Spanish, French). Loaded into the universal set by regex_rules_safe.py; select with LOCALMASK_LANGS=he,ru (default: all, 'none' disables). Adding a language = adding a block here, no code changes. israeli_id and spanish_dni are checksum-validated in engine.py.",
   "he": {
    "israeli_id": {
-    "pattern": "(?:תעודת[\\s-]?זהות|מספר[\\s-]?זהות|ת\\s?[\"״']\\s?ז|ת\\.\\s?ז\\.?|\\bתז\\b|israeli[_\\s.-]?id|teudat[_\\s.-]?zehut)\\D{0,20}?(?<!\\w)(\\d{7,9})(?![\\d\\w])",
+    "pattern": "(?:תעודת[\\s-]?זהות|מספר[\\s-]?זהות|ת\\s?[\"״']\\s?ז|ת\\.\\s?ז\\.?|\\bתז\\b|israeli[_\\s.-]?id|teudat[_\\s.-]?zehut)\\D{0,20}?(?<!\\w)(\\d{7,8}-\\d|\\d{7,9})(?![\\d\\w])",
     "confidence": 0.93,
     "level": "minimal",
     "reason": "Israeli ID number (Teudat Zehut, checksum-validated PII)"
    },
    "israeli_phone": {
-    "pattern": "(?<![\\d\\w])(?:\\+972[\\s.\\-]?(?:5\\d|[23489])[\\s.\\-]?\\d{3}[\\s.\\-]?\\d{4}|0(?:5\\d|[23489])[\\s.\\-]?\\d{3}[\\s.\\-]?\\d{4})(?![\\d\\w])",
+    "pattern": "(?<![\\d\\w])(?:\\+972[\\s.\\-]?(?:5\\d|7[2-9]|[23489])[\\s.\\-]?\\d{3}[\\s.\\-]?\\d{4}|0(?:5\\d|7[2-9]|[23489])[\\s.\\-]?\\d{3}[\\s.\\-]?\\d{4})(?![\\d\\w])",
     "confidence": 0.85,
     "level": "standard",
     "reason": "Israeli phone number — mobile (05X) and landline (02/03/04/08/09), with or without separators (PII)"
@@ -2394,6 +2436,42 @@
     "confidence": 0.87,
     "level": "standard",
     "reason": "Customer ID in Hebrew (מספר לקוח/קוד לקוח/מזהה לקוח) — digit required in value to avoid matching variable-to-variable assignments"
+   },
+   "israeli_id_bare": {
+    "pattern": "(?<![\\w.\\-/:+])(\\d{9})(?![\\w\\-/:]|\\.\\d)",
+    "confidence": 0.9,
+    "level": "standard",
+    "reason": "Unlabeled 9-digit Israeli ID (checksum + Hebrew/ID context required)"
+   },
+   "israeli_company_id": {
+    "pattern": "(?:ח\\.?\\s?פ\\.?|ח[\\\"״']פ|עוסק\\s*מורשה|ע\\.מ\\.?|מספר\\s*חברה)\\s*[:#]?\\s*(\\d{9})(?!\\d)",
+    "confidence": 0.93,
+    "level": "standard",
+    "reason": "Israeli company / VAT number (ח.פ / עוסק מורשה, checksum-validated)"
+   },
+   "israeli_bank_account": {
+    "pattern": "(?<![\\d\\w])(\\d{2}[-/]\\d{3}[-/]\\d{4,9})(?![\\d\\w])",
+    "confidence": 0.9,
+    "level": "standard",
+    "reason": "Israeli bank account in bank-branch-account format (12-680-123456)"
+   },
+   "israeli_bank_account_labeled": {
+    "pattern": "(?:מספר\\s*חשבון|חשבון(?:\\s*בנק)?|מס['׳]?\\s*חשבון)\\s*[:#]?\\s*(\\d{4,9})(?!\\d)",
+    "confidence": 0.9,
+    "level": "standard",
+    "reason": "Israeli bank account number labeled in Hebrew"
+   },
+   "israeli_passport": {
+    "pattern": "(?:דרכון(?:\\s*ישראלי)?(?:\\s*מס(?:פר|['׳])?)?)\\s*[:#]?\\s*([A-Z]{0,2}\\d{7,9})(?!\\d)",
+    "confidence": 0.92,
+    "level": "standard",
+    "reason": "Passport number labeled in Hebrew"
+   },
+   "israeli_license_plate": {
+    "pattern": "(?:מספר\\s*רישוי|מספר\\s*(?:ה)?רכב|לוחית\\s*(?:ה)?רישוי|רכב(?:\\s*\\S+){0,2})\\s*[:#]?\\s*(\\d{2,3}-\\d{2,3}-\\d{2,3})(?!\\d)",
+    "confidence": 0.9,
+    "level": "standard",
+    "reason": "Israeli vehicle license plate labeled in Hebrew"
    }
   }
  },
