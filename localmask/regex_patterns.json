@@ -664,7 +664,7 @@
    "reason": "Server hostname (PRD/STG/DEV prefix)"
   },
   "connstr_password_inline": {
-   "pattern": "(?i)(?<![A-Za-z0-9])(?:Password|Pwd)\\s*=\\s*([^;\\s'\\\"<>]{6,})\\s*(?=;|$|\\s)",
+   "pattern": "(?i)(?<![A-Za-z0-9])(?:Password|Pwd)\\s*=\\s*(?![$`(%{<])([^;\\s'\\\"<>]{6,})\\s*(?=;|$|\\s)",
    "confidence": 0.97,
    "level": "minimal",
    "reason": "Password in semicolon-delimited connection string"
@@ -1164,7 +1164,7 @@
    "reason": "Azure DevOps personal access token"
   },
   "env_secret_suffix": {
-   "pattern": "(?<![\\w-])(?-i:[A-Z][A-Z0-9_]*(?:_PAT|_TOKEN|_SECRET|_SEED|PRIVATE_KEY|_API_KEY|_APIKEY|_ACCESS_KEY|PASSWORD|PASSWD|_PWD))\\s*=\\s*[\\\"']?(?!os\\.|process\\.env|getenv|\\$|%|<)([^\\s\\\"'#;&]{8,})",
+   "pattern": "(?:^\\s*(?:export\\s+)?|\\s--?e(?:nv)?\\s+)(?-i:[A-Z][A-Z0-9_]*(?:_PAT|_TOKEN|_SECRET|_SEED|PRIVATE_KEY|_API_KEY|_APIKEY|_ACCESS_KEY|PASSWORD|PASSWD|_PWD))=[\\\"']?(?!\\$|%|<)([^\\s\\\"'#;&]{8,})",
    "confidence": 0.9,
    "level": "minimal",
    "reason": "Secret-named UPPERCASE env var / -e flag (NAME_TOKEN=..., DB_PASSWORD=...)"
@@ -2450,7 +2450,7 @@
     "reason": "Israeli company / VAT number (ח.פ / עוסק מורשה, checksum-validated)"
    },
    "israeli_bank_account": {
-    "pattern": "(?<![\\d\\w])(\\d{2}[-/]\\d{3}[-/]\\d{4,9})(?![\\d\\w])",
+    "pattern": "(?<![\\d\\w+/])(\\d{2}-\\d{3}-\\d{4,9})(?![\\d\\w/])",
     "confidence": 0.9,
     "level": "standard",
     "reason": "Israeli bank account in bank-branch-account format (12-680-123456)"
